@@ -1,10 +1,8 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: megashop-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-megashop}
@@ -12,93 +10,52 @@ services:
       POSTGRES_DB: ${DB_NAME:-megashop}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U megashop"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: megashop-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # Go Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: megashop-api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
-      PORT: 8080
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      PORT: "8080"
+      ENVIRONMENT: production
       DATABASE_URL: postgres://${DB_USER:-megashop}:${DB_PASSWORD:-megashop123}@postgres:5432/${DB_NAME:-megashop}?sslmode=disable
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-      # Payment gateways
-      COMGATE_SHOP_ID: ${COMGATE_SHOP_ID:-}
-      COMGATE_SECRET: ${COMGATE_SECRET:-}
-      COMGATE_TEST_MODE: ${COMGATE_TEST_MODE:-true}
-      GOPAY_CLIENT_ID: ${GOPAY_CLIENT_ID:-}
-      GOPAY_CLIENT_SECRET: ${GOPAY_CLIENT_SECRET:-}
-      GOPAY_TEST_MODE: ${GOPAY_TEST_MODE:-true}
-      # Packeta
-      PACKETA_API_KEY: ${PACKETA_API_KEY:-}
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      JWT_SECRET: ${JWT_SECRET:-supersecretkey123}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://profibuy.sk,https://www.profibuy.sk}
+    volumes:
+      - storage_data:/app/storage
+    expose:
+      - "8080"
 
-  # Next.js Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-    container_name: megashop-web
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
-    environment:
-      API_URL: http://backend:8080
-    ports:
-      - "3000:3000"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - backend
+    expose:
+      - "3000"
 
 volumes:
   postgres_data:
   redis_data:
-
-networks:
-  default:
-    name: megashop-network
+  storage_data:

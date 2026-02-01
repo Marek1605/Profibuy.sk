@@ -1,4 +1,3 @@
-# Build stage
 FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
@@ -7,17 +6,14 @@ RUN apk add --no-cache git
 
 COPY go.mod ./
 
-# Generate go.sum and download deps
-RUN go mod download || true
-RUN go mod tidy || true
+RUN go mod download 2>&1 || true
 
 COPY . .
 
-RUN go mod tidy
+# Verbose build to see errors
+RUN go mod tidy 2>&1 && \
+    CGO_ENABLED=0 GOOS=linux go build -v -o server ./cmd/server 2>&1
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
-
-# Runtime stage
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates wget

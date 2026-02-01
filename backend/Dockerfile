@@ -1,18 +1,15 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
 RUN apk add --no-cache git
 
-COPY go.mod ./
-
-RUN go mod download 2>&1 || true
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
 
-# Verbose build to see errors
-RUN go mod tidy 2>&1 && \
-    CGO_ENABLED=0 GOOS=linux go build -v -o server ./cmd/server 2>&1
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
 
 FROM alpine:latest
 

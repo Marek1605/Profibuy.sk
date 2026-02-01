@@ -208,14 +208,6 @@ type SupplierProduct struct {
 }
 
 // ProductImage for supplier products (extends the basic one)
-type ProductImage struct {
-	URL       string `json:"url"`
-	IsMain    bool   `json:"is_main"`
-	Date      string `json:"date,omitempty"`
-	Copyright bool   `json:"copyright,omitempty"`
-	Alt       string `json:"alt,omitempty"`
-	Position  int    `json:"position,omitempty"`
-}
 
 // ProductMultimedia for manuals, videos, etc.
 type ProductMultimedia struct {

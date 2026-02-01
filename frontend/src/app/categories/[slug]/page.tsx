@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/shop/Header'
@@ -10,6 +10,10 @@ import { getCategoryProducts } from '@/lib/api'
 import type { Product, Category } from '@/types'
 
 export default function CategoryPage() {
+  return <Suspense fallback={<div className="p-8 text-center">Nacitavam...</div>}><CategoryContent /></Suspense>
+}
+
+function CategoryContent() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()

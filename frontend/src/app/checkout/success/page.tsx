@@ -1,11 +1,16 @@
 'use client'
 
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Header from '@/components/shop/Header'
 import Footer from '@/components/shop/Footer'
 
 export default function CheckoutSuccessPage() {
+  return <Suspense fallback={<div className="p-8 text-center">Nacitavam...</div>}><SuccessContent /></Suspense>
+}
+
+function SuccessContent() {
   const params = useSearchParams()
   const orderNumber = params.get('order')
 

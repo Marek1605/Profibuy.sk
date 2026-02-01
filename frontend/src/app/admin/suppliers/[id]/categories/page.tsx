@@ -69,7 +69,7 @@ export default function SupplierCategoriesPage() {
         setCategoryTree(data.data.tree || []);
         
         // Expand first level by default
-        const firstLevelIds = new Set((data.data.tree || []).map((c: CategoryTree) => c.external_id));
+        const firstLevelIds = new Set<string>((data.data.tree || []).map((c: CategoryTree) => c.external_id));
         setExpandedIds(firstLevelIds);
       }
     } catch (err) {

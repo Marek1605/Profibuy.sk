@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/shop/Header'
@@ -10,6 +10,10 @@ import { getProducts, getFilters, formatPrice } from '@/lib/api'
 import type { Product, FilterOptions } from '@/types'
 
 export default function ProductsPage() {
+  return <Suspense fallback={<div className="p-8 text-center">Nacitavam...</div>}><ProductsContent /></Suspense>
+}
+
+function ProductsContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])

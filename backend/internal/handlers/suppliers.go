@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"megashop/internal/cache"
 	"megashop/internal/database"
 	"megashop/internal/models"
 
@@ -1045,34 +1044,6 @@ func ListSupplierCategories(db *database.Postgres) gin.HandlerFunc {
 }
 
 // buildCategoryTree builds a hierarchical tree from flat categories
-func buildCategoryTree(categories []*models.SupplierCategory) []*models.SupplierCategoryTree {
-	// Create map for quick lookup
-	catMap := make(map[string]*models.SupplierCategoryTree)
-	for _, cat := range categories {
-		catMap[cat.ExternalID] = &models.SupplierCategoryTree{
-			SupplierCategory: cat,
-			Children:         make([]*models.SupplierCategoryTree, 0),
-		}
-	}
-
-	// Build tree
-	roots := make([]*models.SupplierCategoryTree, 0)
-	for _, cat := range categories {
-		node := catMap[cat.ExternalID]
-		if cat.ParentExternalID == "" {
-			roots = append(roots, node)
-		} else if parent, ok := catMap[cat.ParentExternalID]; ok {
-			parent.Children = append(parent.Children, node)
-		} else {
-			// Orphan - add to roots
-			roots = append(roots, node)
-		}
-	}
-
-	return roots
-}
-
-// ListSupplierBrands handles GET /api/admin/suppliers/:id/brands
 func ListSupplierBrands(db *database.Postgres) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()

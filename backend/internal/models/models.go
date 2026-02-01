@@ -37,6 +37,17 @@ type Product struct {
 // ProductImage - štruktúra pre obrázky
 type ProductImage struct {
 	URL       string `json:"url"`
+	Alt       string `json:"alt,omitempty"`
+	Position  int    `json:"position,omitempty"`
+	IsPrimary bool   `json:"is_primary,omitempty"`
+	IsMain    bool   `json:"is_main,omitempty"`
+	Date      string `json:"date,omitempty"`
+	Copyright bool   `json:"copyright,omitempty"`
+}
+	Copyright bool   `json:"copyright,omitempty"`
+}
+// ProductImageOld - DELETE THIS
+	URL       string `json:"url"`
 	Alt       string `json:"alt"`
 	Position  int    `json:"position"`
 	IsPrimary bool   `json:"is_primary"`

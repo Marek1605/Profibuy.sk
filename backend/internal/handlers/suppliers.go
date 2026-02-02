@@ -78,6 +78,27 @@ func CreateSupplier(db *database.Postgres) gin.HandlerFunc {
 		input.CreatedAt = time.Now()
 		input.UpdatedAt = time.Now()
 
+		// Set defaults for JSONB fields if nil
+		if input.AuthCredentials == nil {
+			input.AuthCredentials = []byte("{}")
+		}
+		if input.FieldMappings == nil {
+			input.FieldMappings = []byte("{}")
+		}
+		// Set defaults for other fields
+		if input.FeedType == "" {
+			input.FeedType = "xml"
+		}
+		if input.FeedFormat == "" {
+			input.FeedFormat = "action"
+		}
+		if input.MaxDownloadsPerDay == 0 {
+			input.MaxDownloadsPerDay = 8
+		}
+		if input.AuthType == "" {
+			input.AuthType = "none"
+		}
+
 		if err := db.CreateSupplier(ctx, &input); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 			return

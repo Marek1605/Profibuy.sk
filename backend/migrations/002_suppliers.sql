@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     last_download_date DATE,
     
     -- Authentication (if required)
-    auth_type VARCHAR(20) CHECK (auth_type IN ('none', 'basic', 'bearer', 'api_key')),
+    auth_type VARCHAR(20) DEFAULT 'none' CHECK (auth_type IN ('none', 'basic', 'bearer', 'api_key')),
     auth_credentials JSONB DEFAULT '{}',  -- encrypted in production
     
     -- Status
@@ -400,3 +400,10 @@ CREATE TRIGGER trg_supplier_brands_updated
     BEFORE UPDATE ON supplier_brands
     FOR EACH ROW
     EXECUTE FUNCTION update_supplier_timestamp();
+
+-- Fix: Add default for auth_type if missing
+DO $$ 
+BEGIN
+    ALTER TABLE suppliers ALTER COLUMN auth_type SET DEFAULT 'none';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

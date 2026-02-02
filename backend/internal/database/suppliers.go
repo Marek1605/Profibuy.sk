@@ -18,11 +18,14 @@ import (
 // ListSuppliers returns all suppliers
 func (p *Postgres) ListSuppliers(ctx context.Context) ([]*models.Supplier, error) {
 	query := `
-		SELECT s.id, s.name, s.code, s.description, s.website, s.logo,
-			   s.contact_email, s.contact_phone,
-			   s.feed_url, s.feed_type, s.feed_format, s.xml_item_path, s.category_separator,
-			   s.max_downloads_per_day, s.download_count_today, s.last_download_date,
-			   s.auth_type, s.auth_credentials, s.is_active, s.priority, s.field_mappings,
+		SELECT s.id, s.name, s.code, 
+			   COALESCE(s.description, ''), COALESCE(s.website, ''), COALESCE(s.logo, ''),
+			   COALESCE(s.contact_email, ''), COALESCE(s.contact_phone, ''),
+			   COALESCE(s.feed_url, ''), COALESCE(s.feed_type, 'xml'), COALESCE(s.feed_format, 'action'), 
+			   COALESCE(s.xml_item_path, ''), COALESCE(s.category_separator, ''),
+			   COALESCE(s.max_downloads_per_day, 8), COALESCE(s.download_count_today, 0), s.last_download_date,
+			   COALESCE(s.auth_type, 'none'), COALESCE(s.auth_credentials, '{}'), 
+			   COALESCE(s.is_active, true), COALESCE(s.priority, 0), COALESCE(s.field_mappings, '{}'),
 			   s.created_at, s.updated_at,
 			   COALESCE((SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id), 0) as product_count
 		FROM suppliers s
@@ -64,8 +67,16 @@ func (p *Postgres) ListSuppliers(ctx context.Context) ([]*models.Supplier, error
 // GetSupplier returns a supplier by ID
 func (p *Postgres) GetSupplier(ctx context.Context, id uuid.UUID) (*models.Supplier, error) {
 	query := `
-		SELECT s.*,
-			   (SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id) as product_count
+		SELECT s.id, s.name, s.code,
+			   COALESCE(s.description, ''), COALESCE(s.website, ''), COALESCE(s.logo, ''),
+			   COALESCE(s.contact_email, ''), COALESCE(s.contact_phone, ''),
+			   COALESCE(s.feed_url, ''), COALESCE(s.feed_type, 'xml'), COALESCE(s.feed_format, 'action'),
+			   COALESCE(s.xml_item_path, ''), COALESCE(s.category_separator, ''),
+			   COALESCE(s.max_downloads_per_day, 8), COALESCE(s.download_count_today, 0), s.last_download_date,
+			   COALESCE(s.auth_type, 'none'), COALESCE(s.auth_credentials, '{}'),
+			   COALESCE(s.is_active, true), COALESCE(s.priority, 0), COALESCE(s.field_mappings, '{}'),
+			   s.created_at, s.updated_at,
+			   COALESCE((SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id), 0) as product_count
 		FROM suppliers s
 		WHERE s.id = $1
 	`

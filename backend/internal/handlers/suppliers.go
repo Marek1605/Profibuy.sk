@@ -108,6 +108,11 @@ func CreateSupplier(db *database.Postgres) gin.HandlerFunc {
 
 		if err := db.CreateSupplier(ctx, &input); err != nil {
 			fmt.Printf("[DEBUG] CreateSupplier - DB error: %v\n", err)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "suppliers_code_key") || strings.Contains(errMsg, "duplicate key") {
+				c.JSON(http.StatusConflict, gin.H{"success": false, "error": fmt.Sprintf("Dodávateľ s kódom '%s' už existuje. Použite iný kód.", input.Code)})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": fmt.Sprintf("DB error: %v", err)})
 			return
 		}

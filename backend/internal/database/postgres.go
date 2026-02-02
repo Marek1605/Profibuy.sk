@@ -812,6 +812,56 @@ func (p *Postgres) CreateUser(ctx context.Context, user *models.User) error {
 
 // Migrate runs database migrations
 func (p *Postgres) Migrate() error {
-	// Migration will be run from SQL file
+	ctx := context.Background()
+
+	// Create migrations tracking table
+	_, err := p.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS _migrations (
+			id SERIAL PRIMARY KEY,
+			filename VARCHAR(255) UNIQUE NOT NULL,
+			executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Migration files in order
+	migrations := []struct {
+		filename string
+		sql      string
+	}{
+		{"001_schema.sql", migration001},
+		{"002_suppliers.sql", migration002},
+	}
+
+	for _, m := range migrations {
+		// Check if already executed
+		var count int
+		err := p.pool.QueryRow(ctx, "SELECT COUNT(*) FROM _migrations WHERE filename = $1", m.filename).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check migration %s: %w", m.filename, err)
+		}
+		if count > 0 {
+			fmt.Printf("[DB] Migration %s already applied, skipping\n", m.filename)
+			continue
+		}
+
+		// Execute migration
+		fmt.Printf("[DB] Running migration %s...\n", m.filename)
+		_, err = p.pool.Exec(ctx, m.sql)
+		if err != nil {
+			return fmt.Errorf("failed to run migration %s: %w", m.filename, err)
+		}
+
+		// Record migration
+		_, err = p.pool.Exec(ctx, "INSERT INTO _migrations (filename) VALUES ($1)", m.filename)
+		if err != nil {
+			return fmt.Errorf("failed to record migration %s: %w", m.filename, err)
+		}
+
+		fmt.Printf("[DB] Migration %s completed successfully\n", m.filename)
+	}
+
 	return nil
 }

@@ -10,8 +10,18 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#2563eb',
-          dark: '#1d4ed8',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#1e3a5f',
+          600: '#1e3a5f',
+          700: '#172e4d',
+          800: '#112240',
+          900: '#0a1628',
+          DEFAULT: '#1e3a5f',
+          dark: '#172e4d',
         },
         secondary: '#64748b',
         success: '#22c55e',

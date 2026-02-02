@@ -14,18 +14,18 @@ type Supplier struct {
 	ID                   uuid.UUID       `json:"id" db:"id"`
 	Name                 string          `json:"name" db:"name"`
 	Code                 string          `json:"code" db:"code"` // unique code, e.g., 'action'
-	Description          string          `json:"description" db:"description"`
-	Website              string          `json:"website" db:"website"`
-	Logo                 string          `json:"logo" db:"logo"`
-	ContactEmail         string          `json:"contact_email" db:"contact_email"`
-	ContactPhone         string          `json:"contact_phone" db:"contact_phone"`
+	Description          *string         `json:"description" db:"description"`
+	Website              *string         `json:"website" db:"website"`
+	Logo                 *string         `json:"logo" db:"logo"`
+	ContactEmail         *string         `json:"contact_email" db:"contact_email"`
+	ContactPhone         *string         `json:"contact_phone" db:"contact_phone"`
 	
 	// Feed configuration
 	FeedURL              string          `json:"feed_url" db:"feed_url"`
 	FeedType             string          `json:"feed_type" db:"feed_type"`     // xml, csv, json
 	FeedFormat           string          `json:"feed_format" db:"feed_format"` // action, heureka, custom
-	XMLItemPath          string          `json:"xml_item_path" db:"xml_item_path"`
-	CategorySeparator    string          `json:"category_separator" db:"category_separator"`
+	XMLItemPath          *string         `json:"xml_item_path" db:"xml_item_path"`
+	CategorySeparator    *string         `json:"category_separator" db:"category_separator"`
 	
 	// Download limits
 	MaxDownloadsPerDay   int             `json:"max_downloads_per_day" db:"max_downloads_per_day"`

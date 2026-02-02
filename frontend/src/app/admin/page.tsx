@@ -5,20 +5,9 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { formatPrice } from '@/lib/api'
 
-interface Stats {
-  total_revenue: number
-  today_revenue: number
-  total_orders: number
-  today_orders: number
-  pending_orders: number
-  total_products: number
-  low_stock_products: number
-  total_customers: number
-}
-
 export default function AdminDashboard() {
   const { token } = useAuthStore()
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
     async function load() {
@@ -31,54 +20,48 @@ export default function AdminDashboard() {
   }, [token])
 
   const cards = [
-    { label: 'Celkove trzby', value: formatPrice(stats?.total_revenue || 0), icon: '💰', color: 'bg-green-50 border-green-200' },
-    { label: 'Trzby dnes', value: formatPrice(stats?.today_revenue || 0), icon: '📈', color: 'bg-blue-50 border-blue-200' },
-    { label: 'Celkom objednavok', value: String(stats?.total_orders || 0), icon: '🛒', color: 'bg-purple-50 border-purple-200' },
-    { label: 'Dnes objednavok', value: String(stats?.today_orders || 0), icon: '📦', color: 'bg-orange-50 border-orange-200' },
-    { label: 'Cakajuce', value: String(stats?.pending_orders || 0), icon: '⏳', color: 'bg-yellow-50 border-yellow-200' },
-    { label: 'Produktov', value: String(stats?.total_products || 0), icon: '📋', color: 'bg-indigo-50 border-indigo-200' },
-    { label: 'Nizky sklad', value: String(stats?.low_stock_products || 0), icon: '⚠️', color: 'bg-red-50 border-red-200' },
-    { label: 'Zakaznikov', value: String(stats?.total_customers || 0), icon: '👥', color: 'bg-teal-50 border-teal-200' },
+    { label: 'Celkove trzby', value: formatPrice(stats.total_revenue || 0), icon: '💰', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    { label: 'Trzby dnes', value: formatPrice(stats.today_revenue || 0), icon: '📈', bg: 'bg-blue-50', border: 'border-blue-200' },
+    { label: 'Objednavky', value: String(stats.total_orders || 0), icon: '🛒', bg: 'bg-purple-50', border: 'border-purple-200' },
+    { label: 'Objednavky dnes', value: String(stats.today_orders || 0), icon: '📦', bg: 'bg-orange-50', border: 'border-orange-200' },
+    { label: 'Cakajuce', value: String(stats.pending_orders || 0), icon: '⏳', bg: 'bg-yellow-50', border: 'border-yellow-200' },
+    { label: 'Produktov', value: String(stats.total_products || 0), icon: '📋', bg: 'bg-indigo-50', border: 'border-indigo-200' },
   ]
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {cards.map(card => (
-          <div key={card.label} className={`${card.color} border rounded-lg p-4`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{card.icon}</span>
-            </div>
-            <p className="text-2xl font-bold">{card.value}</p>
-            <p className="text-sm text-gray-600">{card.label}</p>
+      <h1 className="text-2xl font-extrabold mb-6">Dashboard</h1>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {cards.map(c => (
+          <div key={c.label} className={`${c.bg} ${c.border} border rounded-2xl p-5`}>
+            <span className="text-2xl">{c.icon}</span>
+            <p className="text-2xl font-extrabold mt-2">{c.value}</p>
+            <p className="text-sm text-gray-600 mt-1">{c.label}</p>
           </div>
         ))}
       </div>
-
       <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white border rounded-lg p-6">
+        <div className="bg-white rounded-2xl border p-6">
           <h2 className="font-bold mb-4">Rychle akcie</h2>
           <div className="space-y-2">
-            <Link href="/admin/products" className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition">📦 Spravovat produkty</Link>
-            <Link href="/admin/orders" className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition">🛒 Spravovat objednavky</Link>
-            <Link href="/admin/suppliers" className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition">🏭 Import z dodavatelov</Link>
-            <Link href="/admin/categories" className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition">📁 Spravovat kategorie</Link>
-            <Link href="/admin/settings" className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition">⚙️ Nastavenia obchodu</Link>
+            {[
+              { href: '/admin/products', label: '📦 Spravovat produkty' },
+              { href: '/admin/orders', label: '🛒 Spravovat objednavky' },
+              { href: '/admin/suppliers', label: '🏭 Import z dodavatelov' },
+              { href: '/admin/categories', label: '📁 Spravovat kategorie' },
+              { href: '/admin/settings', label: '⚙️ Nastavenia obchodu' },
+            ].map(a => (
+              <Link key={a.href} href={a.href} className="block p-3 bg-gray-50 rounded-xl hover:bg-blue-50 hover:text-blue-700 transition text-sm font-medium">{a.label}</Link>
+            ))}
           </div>
         </div>
-
-        <div className="bg-white border rounded-lg p-6">
-          <h2 className="font-bold mb-4">Info</h2>
-          <div className="space-y-3 text-sm">
-            <p className="text-gray-600">Vitajte v administracii ProfiBuy.sk. Odtialto mozete spravovat cely vas e-shop.</p>
-            <div className="border-t pt-3">
-              <p><strong>Verzia:</strong> 1.0.0</p>
-              <p><strong>Backend:</strong> Go + PostgreSQL</p>
-              <p><strong>Frontend:</strong> Next.js 14</p>
-              <p><strong>Server:</strong> Coolify Docker</p>
-            </div>
+        <div className="bg-white rounded-2xl border p-6">
+          <h2 className="font-bold mb-4">System info</h2>
+          <div className="text-sm space-y-2 text-gray-600">
+            <p><strong>Backend:</strong> Go + PostgreSQL + Redis</p>
+            <p><strong>Frontend:</strong> Next.js 14 + Tailwind</p>
+            <p><strong>Deploy:</strong> Coolify Docker</p>
+            <p><strong>Verzia:</strong> 2.0.0</p>
           </div>
         </div>
       </div>

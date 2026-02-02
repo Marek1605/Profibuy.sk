@@ -3,111 +3,109 @@
 @tailwind utilities;
 
 :root {
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --secondary: #64748b;
+  --primary: #1e3a5f;
+  --primary-light: #2d5a87;
+  --accent: #c4956a;
+  --accent-hover: #b8875c;
   --success: #22c55e;
   --warning: #f59e0b;
   --error: #ef4444;
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --muted: #f1f5f9;
-  --border: #e2e8f0;
+  --sale: #ef4444;
+  --bg: #ffffff;
+  --bg-soft: #f8f9fb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
 }
 
 @layer base {
   body {
-    @apply bg-background text-foreground;
+    color: var(--text);
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
+  * { box-sizing: border-box; }
 }
 
 @layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
   .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-dark focus:ring-primary;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200;
+    background: var(--accent);
   }
-
-  .btn-secondary {
-    @apply btn bg-secondary text-white hover:bg-secondary/90 focus:ring-secondary;
-  }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(196,149,106,0.3); }
 
   .btn-outline {
-    @apply btn border-2 border-primary text-primary hover:bg-primary hover:text-white focus:ring-primary;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold border-2 transition-all duration-200;
+    border-color: var(--primary); color: var(--primary);
   }
+  .btn-outline:hover { background: var(--primary); color: #fff; }
 
-  .btn-ghost {
-    @apply btn hover:bg-muted focus:ring-primary;
-  }
-
-  .input {
-    @apply w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
-  }
-
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-border;
-  }
-
-  .badge {
-    @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
-  }
-
-  .badge-primary {
-    @apply badge bg-primary/10 text-primary;
-  }
-
-  .badge-success {
-    @apply badge bg-success/10 text-success;
-  }
-
-  .badge-warning {
-    @apply badge bg-warning/10 text-warning;
-  }
-
-  .badge-error {
-    @apply badge bg-error/10 text-error;
+  .section-title {
+    @apply text-2xl md:text-3xl font-bold;
+    color: var(--text);
   }
 }
 
-/* Product grid */
-.product-grid {
-  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6;
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+
+/* Hide scrollbar on horizontal scroll */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Product card hover */
+.product-card {
+  @apply bg-white rounded-2xl border overflow-hidden transition-all duration-300;
+  border-color: var(--border);
+}
+.product-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  transform: translateY(-4px);
 }
 
-/* Price styling */
-.price {
-  @apply text-lg font-bold text-foreground;
+/* Category card */
+.category-card {
+  @apply flex flex-col items-center gap-3 p-5 rounded-2xl border bg-white transition-all duration-300 cursor-pointer;
+  border-color: var(--border);
+}
+.category-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(196,149,106,0.15);
+  transform: translateY(-3px);
 }
 
-.price-sale {
-  @apply text-lg font-bold text-error;
+/* Badge */
+.sale-badge {
+  @apply absolute top-3 left-3 px-3 py-1 rounded-lg text-xs font-bold text-white z-10;
+  background: var(--sale);
 }
 
-.price-original {
-  @apply text-sm text-secondary line-through;
-}
-
-/* Loading skeleton */
+/* Skeleton loader */
 .skeleton {
-  @apply animate-pulse bg-muted rounded;
+  @apply animate-pulse rounded-xl;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Mega menu */
+.mega-menu {
+  @apply absolute top-full left-0 right-0 bg-white border-t shadow-2xl opacity-0 invisible transition-all duration-200 z-50;
 }
+.mega-menu.active { @apply opacity-100 visible; }
 
-::-webkit-scrollbar-track {
-  @apply bg-muted;
-}
+/* Sticky header shadow */
+.header-shadow { box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
 
-::-webkit-scrollbar-thumb {
-  @apply bg-secondary/30 rounded-full;
-}
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-secondary/50;
-}

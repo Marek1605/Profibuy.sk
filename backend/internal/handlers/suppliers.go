@@ -829,6 +829,8 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	ctx := context.Background()
 	startTime := time.Now()
 
+	fmt.Printf("[Import] Starting import for supplier %s, feed: %s\n", supplier.Code, storedFeed.FilePath)
+
 	updateProgress := func(status string, message string) {
 		importProgressMu.Lock()
 		feedImport.Status = status
@@ -837,6 +839,7 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 			feedImport.Logs = feedImport.Logs[len(feedImport.Logs)-100:]
 		}
 		importProgressMu.Unlock()
+		fmt.Printf("[Import] %s: %s\n", status, message)
 	}
 
 	updateProgress("running", "Opening feed file...")
@@ -844,6 +847,7 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	// Open feed file
 	file, err := os.Open(storedFeed.FilePath)
 	if err != nil {
+		fmt.Printf("[Import] ERROR opening file %s: %v\n", storedFeed.FilePath, err)
 		updateProgress("failed", fmt.Sprintf("Failed to open feed file: %v", err))
 		feedImport.ErrorMessage = err.Error()
 		feedImport.Status = "failed"
@@ -852,6 +856,11 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		return
 	}
 	defer file.Close()
+
+	fmt.Printf("[Import] File opened successfully, size info from stat...\n")
+	if fi, err := file.Stat(); err == nil {
+		fmt.Printf("[Import] File size: %d bytes\n", fi.Size())
+	}
 
 	updateProgress("running", "Parsing XML...")
 

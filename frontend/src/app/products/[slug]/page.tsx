@@ -119,7 +119,7 @@ export default function ProductDetailPage() {
                       <span className="px-5 py-3 border-x-2 min-w-[3.5rem] text-center font-bold">{quantity}</span>
                       <button onClick={() => setQuantity(Math.min(product.stock, quantity + 1))} className="px-4 py-3 hover:bg-gray-100 text-lg font-bold transition">+</button>
                     </div>
-                    <button onClick={handleAddToCart} className={`flex-1 py-3.5 px-8 rounded-xl font-bold text-white text-base transition-all duration-200 ${added ? 'bg-green-500 scale-[1.02]' : 'hover:scale-[1.02] hover:shadow-lg'}`} style={!added ? { background: 'var(--accent)' } : {}}>
+                    <button onClick={handleAddToCart} className={`flex-1 py-3.5 px-8 rounded-xl font-bold text-white text-base transition-all duration-200 ${added ? 'bg-green-500 scale-[1.02]' : 'hover:scale-[1.02] hover:shadow-lg'}`} style={!added ? { background: 'var(--primary)' } : {}}>
                       {added ? '✓ Pridane do kosika!' : '🛒 Pridat do kosika'}
                     </button>
                   </div>

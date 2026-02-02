@@ -174,7 +174,7 @@ function ProductsContent() {
                           else p = page - 3 + i
                         }
                         return (
-                          <button key={p} onClick={() => updateFilter('page', String(p))} className={`w-10 h-10 rounded-lg text-sm font-medium transition ${p === page ? 'text-white' : 'border bg-white hover:bg-gray-50'}`} style={p === page ? { background: 'var(--accent)' } : {}}>
+                          <button key={p} onClick={() => updateFilter('page', String(p))} className={`w-10 h-10 rounded-lg text-sm font-medium transition ${p === page ? 'text-white' : 'border bg-white hover:bg-gray-50'}`} style={p === page ? { background: 'var(--primary)' } : {}}>
                             {p}
                           </button>
                         )

@@ -12,7 +12,7 @@ export default function Footer() {
           </div>
           <div className="flex w-full md:w-auto">
             <input type="email" placeholder="Zadajte vas email..." className="px-4 py-3 bg-gray-800 rounded-l-xl text-sm text-white placeholder-gray-500 focus:outline-none w-full md:w-72" />
-            <button className="px-6 py-3 rounded-r-xl text-sm font-semibold text-white whitespace-nowrap" style={{ background: 'var(--accent)' }}>Odoberať</button>
+            <button className="px-6 py-3 rounded-r-xl text-sm font-semibold text-white whitespace-nowrap" style={{ background: 'var(--primary)' }}>Odoberať</button>
           </div>
         </div>
       </div>

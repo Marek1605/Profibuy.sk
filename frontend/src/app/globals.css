@@ -31,9 +31,9 @@
 @layer components {
   .btn-primary {
     @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200;
-    background: var(--accent);
+    background: var(--primary);
   }
-  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(196,149,106,0.3); }
+  .btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(30,58,95,0.35); }
 
   .btn-outline {
     @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold border-2 transition-all duration-200;

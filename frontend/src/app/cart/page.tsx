@@ -74,7 +74,7 @@ export default function CartPage() {
                   <span>Celkom</span><span>{formatPrice(total + shipping)}</span>
                 </div>
               </div>
-              <Link href="/checkout" className="block w-full text-center py-3.5 rounded-xl mt-6 text-white font-bold text-base transition hover:scale-[1.02] hover:shadow-lg" style={{ background: 'var(--accent)' }}>
+              <Link href="/checkout" className="block w-full text-center py-3.5 rounded-xl mt-6 text-white font-bold text-base transition hover:scale-[1.02] hover:shadow-lg" style={{ background: 'var(--primary)' }}>
                 Pokracovat k objednavke &rarr;
               </Link>
               <Link href="/products" className="block text-center text-sm text-gray-500 mt-4 hover:text-gray-700 transition">

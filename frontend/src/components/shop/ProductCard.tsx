@@ -76,7 +76,7 @@ export default function ProductCard({ product }: { product: Product }) {
             {product.stock > 0 ? 'Skladom' : 'Nedostupne'}
           </span>
           {product.stock > 0 && (
-            <button onClick={handleAddToCart} className={`px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all duration-200 ${added ? 'bg-green-500' : 'hover:scale-105'}`} style={!added ? { background: 'var(--accent)' } : {}}>
+            <button onClick={handleAddToCart} className={`px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all duration-200 ${added ? 'bg-green-500' : 'hover:scale-105'}`} style={!added ? { background: 'var(--primary)' } : {}}>
               {added ? '✓' : 'Do kosika'}
             </button>
           )}

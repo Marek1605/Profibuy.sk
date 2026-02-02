@@ -18,14 +18,20 @@ import (
 // ListSuppliers returns all suppliers
 func (p *Postgres) ListSuppliers(ctx context.Context) ([]*models.Supplier, error) {
 	query := `
-		SELECT s.*,
-			   (SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id) as product_count
+		SELECT s.id, s.name, s.code, s.description, s.website, s.logo,
+			   s.contact_email, s.contact_phone,
+			   s.feed_url, s.feed_type, s.feed_format, s.xml_item_path, s.category_separator,
+			   s.max_downloads_per_day, s.download_count_today, s.last_download_date,
+			   s.auth_type, s.auth_credentials, s.is_active, s.priority, s.field_mappings,
+			   s.created_at, s.updated_at,
+			   COALESCE((SELECT COUNT(*) FROM supplier_products sp WHERE sp.supplier_id = s.id), 0) as product_count
 		FROM suppliers s
 		ORDER BY s.priority DESC, s.name ASC
 	`
 
 	rows, err := p.pool.Query(ctx, query)
 	if err != nil {
+		fmt.Printf("[DEBUG] ListSuppliers query error: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -44,12 +50,14 @@ func (p *Postgres) ListSuppliers(ctx context.Context) ([]*models.Supplier, error
 			&productCount,
 		)
 		if err != nil {
+			fmt.Printf("[DEBUG] ListSuppliers scan error: %v\n", err)
 			return nil, err
 		}
 		s.ProductCount = productCount
 		suppliers = append(suppliers, &s)
 	}
 
+	fmt.Printf("[DEBUG] ListSuppliers: found %d suppliers\n", len(suppliers))
 	return suppliers, nil
 }
 

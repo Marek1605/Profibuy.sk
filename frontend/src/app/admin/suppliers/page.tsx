@@ -96,12 +96,20 @@ export default function SuppliersPage() {
   const loadSuppliers = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers`, { headers: authHeaders() });
-      const data = await res.json();
+      const text = await res.text();
+      console.log('[DEBUG] loadSuppliers response:', res.status, text.substring(0, 200));
+      const data = JSON.parse(text);
       if (data.success) {
         setSuppliers(data.data || []);
+        // Load download status for each supplier
+        for (const s of (data.data || [])) {
+          loadDownloadStatus(s.id);
+        }
+      } else {
+        console.error('[DEBUG] loadSuppliers error:', data.error);
       }
     } catch (err) {
-      console.error('Failed to load suppliers:', err);
+      console.error('[DEBUG] loadSuppliers failed:', err);
     } finally {
       setLoading(false);
     }

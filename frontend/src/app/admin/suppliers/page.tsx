@@ -216,24 +216,33 @@ export default function SuppliersPage() {
   };
 
   const startImport = async (supplier: Supplier) => {
+    console.log('[DEBUG] Starting import for supplier:', supplier.id);
     setImporting(supplier.id);
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/import`, {
         method: 'POST',
         headers: authHeaders(),
       });
-      const data = await res.json();
+      const text = await res.text();
+      console.log('[DEBUG] Import response:', res.status, text);
+      
+      let data;
+      try { data = JSON.parse(text); } catch {
+        alert(`Import error - invalid JSON: ${text.substring(0, 200)}`);
+        setImporting(null);
+        return;
+      }
       
       if (data.success) {
+        console.log('[DEBUG] Import started, progress:', data.data);
         setImportProgress(data.data);
-        setSelectedSupplier(supplier);
-        setShowFeedModal(true);
       } else {
-        alert(`Chyba: ${data.error}`);
+        alert(`Chyba importu: ${data.error}`);
         setImporting(null);
       }
-    } catch (err) {
-      alert('Chyba pri spúšťaní importu');
+    } catch (err: any) {
+      console.error('[DEBUG] Import fetch error:', err);
+      alert(`Sieťová chyba: ${err.message}`);
       setImporting(null);
     }
   };

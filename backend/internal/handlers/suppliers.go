@@ -201,8 +201,25 @@ func GetCurrentFeed(db *database.Postgres) gin.HandlerFunc {
 	}
 }
 
+// Download progress tracking
+var downloadProgress = make(map[uuid.UUID]*DownloadStatus)
+var downloadProgressMu sync.RWMutex
+
+type DownloadStatus struct {
+	SupplierID   uuid.UUID `json:"supplier_id"`
+	Status       string    `json:"status"` // downloading, completed, failed
+	BytesTotal   int64     `json:"bytes_total"`
+	BytesDown    int64     `json:"bytes_downloaded"`
+	Percent      float64   `json:"percent"`
+	Speed        string    `json:"speed"`
+	Error        string    `json:"error,omitempty"`
+	StartedAt    time.Time `json:"started_at"`
+	FinishedAt   time.Time `json:"finished_at,omitempty"`
+	FeedID       uuid.UUID `json:"feed_id,omitempty"`
+}
+
 // DownloadFeed handles POST /api/admin/suppliers/:id/download
-// Downloads feed from supplier URL and stores it locally
+// Starts async download with progress tracking
 func DownloadFeed(db *database.Postgres) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
@@ -245,94 +262,218 @@ func DownloadFeed(db *database.Postgres) gin.HandlerFunc {
 			return
 		}
 
-		// Start download
-		startTime := time.Now()
-
-		// Create storage directory
-		storageDir := filepath.Join("storage", "feeds", supplier.Code)
-		if err := os.MkdirAll(storageDir, 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to create storage directory"})
+		// Check if already downloading
+		downloadProgressMu.RLock()
+		existing, isRunning := downloadProgress[supplierID]
+		downloadProgressMu.RUnlock()
+		if isRunning && existing.Status == "downloading" {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Download already in progress"})
 			return
 		}
 
-		// Download file
-		resp, err := http.Get(supplier.FeedURL)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": fmt.Sprintf("Download failed: %v", err)})
-			return
+		// Create progress tracker
+		status := &DownloadStatus{
+			SupplierID: supplierID,
+			Status:     "downloading",
+			StartedAt:  time.Now(),
 		}
-		defer resp.Body.Close()
+		downloadProgressMu.Lock()
+		downloadProgress[supplierID] = status
+		downloadProgressMu.Unlock()
 
-		if resp.StatusCode != http.StatusOK {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": fmt.Sprintf("Download failed with status: %d", resp.StatusCode)})
-			return
-		}
-
-		// Create file with timestamp
-		filename := fmt.Sprintf("%s_%s.xml", supplier.Code, time.Now().Format("2006-01-02_15-04-05"))
-		filePath := filepath.Join(storageDir, filename)
-
-		file, err := os.Create(filePath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to create file"})
-			return
-		}
-
-		// Hash while copying
-		hash := sha256.New()
-		writer := io.MultiWriter(file, hash)
-
-		size, err := io.Copy(writer, resp.Body)
-		file.Close()
-		if err != nil {
-			os.Remove(filePath)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to save file"})
-			return
-		}
-
-		downloadDuration := time.Since(startTime)
-
-		// Mark previous feeds as not current
-		if err := db.MarkFeedsNotCurrent(ctx, supplierID); err != nil {
-			// Log but don't fail
-			fmt.Printf("Warning: Failed to mark previous feeds as not current: %v\n", err)
-		}
-
-		// Create stored feed record
-		storedFeed := &models.StoredFeed{
-			ID:               uuid.New(),
-			SupplierID:       supplierID,
-			Filename:         filename,
-			FilePath:         filePath,
-			FileSize:         size,
-			FileHash:         hex.EncodeToString(hash.Sum(nil)),
-			ContentType:      resp.Header.Get("Content-Type"),
-			DownloadedAt:     time.Now(),
-			DownloadDuration: int(downloadDuration.Milliseconds()),
-			SourceURL:        supplier.FeedURL,
-			Status:           "downloaded",
-			IsCurrent:        true,
-			ExpiresAt:        time.Now().Add(24 * time.Hour), // Expires in 24 hours
-			CreatedAt:        time.Now(),
-		}
-
-		if err := db.CreateStoredFeed(ctx, storedFeed); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
-			return
-		}
-
-		// Increment download counter
+		// Increment download counter NOW (before async) to prevent double downloads
 		if err := db.IncrementSupplierDownload(ctx, supplierID); err != nil {
-			// Log but don't fail
 			fmt.Printf("Warning: Failed to increment download counter: %v\n", err)
 		}
 
+		// Start async download
+		go runDownload(db, supplier, status)
+
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data":    storedFeed,
-			"message": fmt.Sprintf("Feed downloaded successfully. %d bytes in %v", size, downloadDuration.Round(time.Millisecond)),
+			"message": "Download started. Use GET /download-status to track progress.",
+			"data":    status,
 		})
 	}
+}
+
+// runDownload performs the actual file download in background
+func runDownload(db *database.Postgres, supplier *models.Supplier, status *DownloadStatus) {
+	ctx := context.Background()
+	startTime := time.Now()
+
+	updateStatus := func(s string, err string) {
+		downloadProgressMu.Lock()
+		status.Status = s
+		if err != "" {
+			status.Error = err
+		}
+		downloadProgressMu.Unlock()
+	}
+
+	// Create HTTP client with long timeout and proper headers
+	client := &http.Client{
+		Timeout: 30 * time.Minute, // Action XML can be huge
+		Transport: &http.Transport{
+			MaxIdleConns:        10,
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  false,
+			TLSHandshakeTimeout: 30 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+		},
+	}
+
+	// Build request with proper headers
+	req, err := http.NewRequest("GET", supplier.FeedURL, nil)
+	if err != nil {
+		updateStatus("failed", fmt.Sprintf("Invalid URL: %v", err))
+		return
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ProfiBuy/2.0; +https://profibuy.sk)")
+	req.Header.Set("Accept", "application/xml, text/xml, */*")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("Connection", "keep-alive")
+
+	fmt.Printf("[Download] Starting download from: %s\n", supplier.FeedURL)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		updateStatus("failed", fmt.Sprintf("Download failed: %v", err))
+		fmt.Printf("[Download] ERROR: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		updateStatus("failed", fmt.Sprintf("Server returned HTTP %d: %s", resp.StatusCode, string(body)))
+		fmt.Printf("[Download] ERROR: HTTP %d\n", resp.StatusCode)
+		return
+	}
+
+	// Get content length if available
+	if resp.ContentLength > 0 {
+		status.BytesTotal = resp.ContentLength
+	}
+
+	fmt.Printf("[Download] Response OK. Content-Length: %d, Content-Type: %s\n", resp.ContentLength, resp.Header.Get("Content-Type"))
+
+	// Create storage directory
+	storageDir := filepath.Join("storage", "feeds", supplier.Code)
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		updateStatus("failed", fmt.Sprintf("Failed to create directory: %v", err))
+		return
+	}
+
+	// Create file
+	filename := fmt.Sprintf("%s_%s.xml", supplier.Code, time.Now().Format("2006-01-02_15-04-05"))
+	filePath := filepath.Join(storageDir, filename)
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		updateStatus("failed", "Failed to create file")
+		return
+	}
+
+	// Download with progress tracking
+	hash := sha256.New()
+	writer := io.MultiWriter(file, hash)
+
+	buf := make([]byte, 256*1024) // 256KB buffer
+	var totalBytes int64
+	lastLog := time.Now()
+
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			_, writeErr := writer.Write(buf[:n])
+			if writeErr != nil {
+				file.Close()
+				os.Remove(filePath)
+				updateStatus("failed", fmt.Sprintf("Write error: %v", writeErr))
+				return
+			}
+			totalBytes += int64(n)
+
+			// Update progress
+			downloadProgressMu.Lock()
+			status.BytesDown = totalBytes
+			if status.BytesTotal > 0 {
+				status.Percent = float64(totalBytes) / float64(status.BytesTotal) * 100
+			}
+			elapsed := time.Since(startTime).Seconds()
+			if elapsed > 0 {
+				speedMBs := float64(totalBytes) / 1024 / 1024 / elapsed
+				status.Speed = fmt.Sprintf("%.1f MB/s", speedMBs)
+			}
+			downloadProgressMu.Unlock()
+
+			// Log progress every 10 seconds
+			if time.Since(lastLog) > 10*time.Second {
+				fmt.Printf("[Download] %s: %.1f MB downloaded (%.1f%%)\n",
+					supplier.Code, float64(totalBytes)/1024/1024, status.Percent)
+				lastLog = time.Now()
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			file.Close()
+			os.Remove(filePath)
+			updateStatus("failed", fmt.Sprintf("Read error: %v", readErr))
+			return
+		}
+	}
+	file.Close()
+
+	downloadDuration := time.Since(startTime)
+	fmt.Printf("[Download] %s: Completed! %.1f MB in %v\n",
+		supplier.Code, float64(totalBytes)/1024/1024, downloadDuration.Round(time.Second))
+
+	// Mark previous feeds as not current
+	if err := db.MarkFeedsNotCurrent(ctx, supplier.ID); err != nil {
+		fmt.Printf("Warning: Failed to mark previous feeds: %v\n", err)
+	}
+
+	// Create stored feed record
+	storedFeed := &models.StoredFeed{
+		ID:               uuid.New(),
+		SupplierID:       supplier.ID,
+		Filename:         filename,
+		FilePath:         filePath,
+		FileSize:         totalBytes,
+		FileHash:         hex.EncodeToString(hash.Sum(nil)),
+		ContentType:      resp.Header.Get("Content-Type"),
+		DownloadedAt:     time.Now(),
+		DownloadDuration: int(downloadDuration.Milliseconds()),
+		SourceURL:        supplier.FeedURL,
+		Status:           "downloaded",
+		IsCurrent:        true,
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
+		CreatedAt:        time.Now(),
+	}
+
+	if err := db.CreateStoredFeed(ctx, storedFeed); err != nil {
+		updateStatus("failed", fmt.Sprintf("DB error: %v", err))
+		return
+	}
+
+	// Update status to completed
+	downloadProgressMu.Lock()
+	status.Status = "completed"
+	status.FinishedAt = time.Now()
+	status.FeedID = storedFeed.ID
+	downloadProgressMu.Unlock()
+
+	// Clean up progress after 10 minutes
+	go func() {
+		time.Sleep(10 * time.Minute)
+		downloadProgressMu.Lock()
+		delete(downloadProgress, supplier.ID)
+		downloadProgressMu.Unlock()
+	}()
 }
 
 // GetDownloadStatus handles GET /api/admin/suppliers/:id/download-status
@@ -363,16 +504,27 @@ func GetDownloadStatus(db *database.Postgres) gin.HandlerFunc {
 			remaining = 0
 		}
 
+		// Check for active download progress
+		downloadProgressMu.RLock()
+		activeDownload, hasActive := downloadProgress[supplierID]
+		downloadProgressMu.RUnlock()
+
+		response := gin.H{
+			"can_download":        canDownload,
+			"downloads_today":     supplier.DownloadCountToday,
+			"max_downloads":       supplier.MaxDownloadsPerDay,
+			"downloads_remaining": remaining,
+			"last_download":       supplier.LastDownloadDate,
+			"current_feed":        currentFeed,
+		}
+
+		if hasActive {
+			response["active_download"] = activeDownload
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data": gin.H{
-				"can_download":       canDownload,
-				"downloads_today":    supplier.DownloadCountToday,
-				"max_downloads":      supplier.MaxDownloadsPerDay,
-				"downloads_remaining": remaining,
-				"last_download":      supplier.LastDownloadDate,
-				"current_feed":       currentFeed,
-			},
+			"data":    response,
 		})
 	}
 }

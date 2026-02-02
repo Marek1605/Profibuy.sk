@@ -148,15 +148,49 @@ export default function SuppliersPage() {
       const data = await res.json();
       
       if (data.success) {
-        alert(`Feed úspešne stiahnutý!\n${data.message}`);
-        loadSuppliers();
-        loadDownloadStatus(supplier.id);
+        // Poll for download progress
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/download-status`);
+            const statusData = await statusRes.json();
+            
+            if (statusData.success && statusData.data?.active_download) {
+              const dl = statusData.data.active_download;
+              if (dl.status === 'completed') {
+                clearInterval(pollInterval);
+                setDownloading(null);
+                alert(`Feed úspešne stiahnutý! ${(dl.bytes_downloaded / 1024 / 1024).toFixed(1)} MB`);
+                loadSuppliers();
+                loadDownloadStatus(supplier.id);
+              } else if (dl.status === 'failed') {
+                clearInterval(pollInterval);
+                setDownloading(null);
+                alert(`Chyba pri sťahovaní: ${dl.error}`);
+              }
+              // Still downloading - update UI would happen here
+            } else {
+              // No active download - might be done
+              clearInterval(pollInterval);
+              setDownloading(null);
+              loadSuppliers();
+              loadDownloadStatus(supplier.id);
+            }
+          } catch {
+            // Continue polling
+          }
+        }, 3000); // Poll every 3 seconds
+        
+        // Safety: stop polling after 30 minutes
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          setDownloading(null);
+        }, 30 * 60 * 1000);
       } else {
         alert(`Chyba: ${data.error}`);
+        setDownloading(null);
       }
     } catch (err) {
       alert('Chyba pri sťahovaní feedu');
-    } finally {
       setDownloading(null);
     }
   };

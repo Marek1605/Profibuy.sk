@@ -2,13 +2,24 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   Truck, Download, Play, Pause, RefreshCw, Eye, Settings, Trash2,
   CheckCircle, AlertCircle, Clock, FileText, Plus, ChevronRight,
   Database, Package, FolderTree, Loader2
 } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+// Auth helper - adds JWT token to requests
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+}
 
 interface Supplier {
   id: string;
@@ -84,7 +95,7 @@ export default function SuppliersPage() {
 
   const loadSuppliers = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/suppliers`);
+      const res = await fetch(`${API_BASE}/admin/suppliers`, { headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setSuppliers(data.data || []);
@@ -98,7 +109,7 @@ export default function SuppliersPage() {
 
   const loadDownloadStatus = useCallback(async (supplierId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/download-status`);
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/download-status`, { headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setDownloadStatus(prev => ({ ...prev, [supplierId]: data.data }));
@@ -122,7 +133,7 @@ export default function SuppliersPage() {
     
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/admin/suppliers/${importing}/import/${importProgress.id}/progress`);
+        const res = await fetch(`${API_BASE}/admin/suppliers/${importing}/import/${importProgress.id}/progress`, { headers: authHeaders() });
         const data = await res.json();
         if (data.success) {
           setImportProgress(data.data);
@@ -144,6 +155,7 @@ export default function SuppliersPage() {
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/download`, {
         method: 'POST',
+        headers: authHeaders(),
       });
       const data = await res.json();
       
@@ -151,7 +163,7 @@ export default function SuppliersPage() {
         // Poll for download progress
         const pollInterval = setInterval(async () => {
           try {
-            const statusRes = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/download-status`);
+            const statusRes = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/download-status`, { headers: authHeaders() });
             const statusData = await statusRes.json();
             
             if (statusData.success && statusData.data?.active_download) {
@@ -200,6 +212,7 @@ export default function SuppliersPage() {
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers/${supplier.id}/import`, {
         method: 'POST',
+        headers: authHeaders(),
       });
       const data = await res.json();
       
@@ -222,7 +235,7 @@ export default function SuppliersPage() {
       console.log('[DEBUG] Creating supplier:', JSON.stringify(newSupplier));
       const res = await fetch(`${API_BASE}/admin/suppliers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(newSupplier),
       });
       

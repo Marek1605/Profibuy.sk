@@ -8,7 +8,16 @@ import {
   Download, FileText, AlertCircle, Check
 } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { useAuthStore } from '@/lib/store';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+}
 
 interface Supplier {
   id: string;
@@ -60,7 +69,7 @@ export default function SupplierDetailPage() {
   const loadSupplier = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`);
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`, { headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setSupplier(data.data);
@@ -98,7 +107,7 @@ export default function SupplierDetailPage() {
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(formData),
       });
       const data = await res.json();

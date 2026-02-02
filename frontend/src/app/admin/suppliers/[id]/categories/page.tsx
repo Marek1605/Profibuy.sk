@@ -8,7 +8,16 @@ import {
   Package, Loader2, Search, Link as LinkIcon, Check
 } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { useAuthStore } from '@/lib/store';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+}
 
 interface SupplierCategory {
   id: string;
@@ -49,7 +58,7 @@ export default function SupplierCategoriesPage() {
 
   const loadSupplier = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`);
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`, { headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setSupplier(data.data);
@@ -62,7 +71,7 @@ export default function SupplierCategoriesPage() {
   const loadCategories = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/categories`);
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/categories`, { headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setCategories(data.data.categories || []);

@@ -295,12 +295,7 @@ func DownloadFeed(db *database.Postgres) gin.HandlerFunc {
 		downloadProgress[supplierID] = status
 		downloadProgressMu.Unlock()
 
-		// Increment download counter NOW (before async) to prevent double downloads
-		if err := db.IncrementSupplierDownload(ctx, supplierID); err != nil {
-			fmt.Printf("Warning: Failed to increment download counter: %v\n", err)
-		}
-
-		// Start async download
+		// Start async download (counter will be incremented after successful connection)
 		go runDownload(db, supplier, status)
 
 		c.JSON(http.StatusOK, gin.H{
@@ -332,8 +327,8 @@ func runDownload(db *database.Postgres, supplier *models.Supplier, status *Downl
 			MaxIdleConns:        10,
 			IdleConnTimeout:     90 * time.Second,
 			DisableCompression:  false,
-			TLSHandshakeTimeout: 30 * time.Second,
-			ResponseHeaderTimeout: 60 * time.Second,
+			TLSHandshakeTimeout: 60 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Minute, // Action.pl is slow to respond
 		},
 	}
 
@@ -372,6 +367,11 @@ func runDownload(db *database.Postgres, supplier *models.Supplier, status *Downl
 	}
 
 	fmt.Printf("[Download] Response OK. Content-Length: %d, Content-Type: %s\n", resp.ContentLength, resp.Header.Get("Content-Type"))
+
+	// NOW increment download counter - only after successful connection
+	if err := db.IncrementSupplierDownload(ctx, supplier.ID); err != nil {
+		fmt.Printf("[Download] Warning: Failed to increment download counter: %v\n", err)
+	}
 
 	// Create storage directory
 	storageDir := filepath.Join("storage", "feeds", supplier.Code)

@@ -98,13 +98,13 @@ export default function SuppliersPage() {
       const res = await fetch(`${API_BASE}/admin/suppliers`, { headers: authHeaders() });
       const text = await res.text();
       console.log('[DEBUG] loadSuppliers response:', res.status, text.substring(0, 200));
-      const data = JSON.parse(text);
+      let data;
+      try { data = JSON.parse(text); } catch {
+        console.error('[DEBUG] Invalid JSON from suppliers:', text.substring(0, 200));
+        return;
+      }
       if (data.success) {
         setSuppliers(data.data || []);
-        // Load download status for each supplier
-        for (const s of (data.data || [])) {
-          loadDownloadStatus(s.id);
-        }
       } else {
         console.error('[DEBUG] loadSuppliers error:', data.error);
       }
@@ -346,7 +346,7 @@ export default function SuppliersPage() {
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <span className="px-2 py-0.5 bg-gray-100 rounded">{supplier.code}</span>
                           <span>•</span>
-                          <span>{supplier.feed_format.toUpperCase()} feed</span>
+                          <span>{(supplier.feed_format || 'xml').toUpperCase()} feed</span>
                         </div>
                       </div>
                     </div>
@@ -364,7 +364,7 @@ export default function SuppliersPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50 border-b">
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">{supplier.product_count.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-gray-900">{(supplier.product_count || 0).toLocaleString()}</div>
                     <div className="text-sm text-gray-500">Produktov</div>
                   </div>
                   <div>
@@ -382,9 +382,9 @@ export default function SuppliersPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="text-2xl font-bold text-gray-900">
-                        {status?.downloads_remaining ?? supplier.max_downloads_per_day - supplier.download_count_today}
+                        {status?.downloads_remaining ?? ((supplier.max_downloads_per_day || 8) - (supplier.download_count_today || 0))}
                       </div>
-                      <div className="text-sm text-gray-400">/ {supplier.max_downloads_per_day}</div>
+                      <div className="text-sm text-gray-400">/ {supplier.max_downloads_per_day || 8}</div>
                     </div>
                     <div className="text-sm text-gray-500">Stiahnutí zostáva</div>
                   </div>

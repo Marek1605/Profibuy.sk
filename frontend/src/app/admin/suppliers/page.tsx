@@ -219,12 +219,21 @@ export default function SuppliersPage() {
 
   const createSupplier = async () => {
     try {
+      console.log('[DEBUG] Creating supplier:', JSON.stringify(newSupplier));
       const res = await fetch(`${API_BASE}/admin/suppliers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSupplier),
       });
-      const data = await res.json();
+      
+      const text = await res.text();
+      console.log('[DEBUG] Response:', res.status, text);
+      
+      let data;
+      try { data = JSON.parse(text); } catch {
+        alert(`Server error (HTTP ${res.status}):\n${text.substring(0, 500)}`);
+        return;
+      }
       
       if (data.success) {
         setShowAddModal(false);
@@ -239,10 +248,10 @@ export default function SuppliersPage() {
         });
         loadSuppliers();
       } else {
-        alert(`Chyba: ${data.error}`);
+        alert(`Chyba (HTTP ${res.status}):\n\n${data.error || JSON.stringify(data)}`);
       }
-    } catch (err) {
-      alert('Chyba pri vytváraní dodávateľa');
+    } catch (err: any) {
+      alert(`Sieťová chyba:\n\n${err.message || String(err)}`);
     }
   };
 

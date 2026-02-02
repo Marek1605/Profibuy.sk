@@ -70,9 +70,13 @@ func CreateSupplier(db *database.Postgres) gin.HandlerFunc {
 
 		var input models.Supplier
 		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			fmt.Printf("[DEBUG] CreateSupplier - JSON bind error: %v\n", err)
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": fmt.Sprintf("JSON parse error: %v", err)})
 			return
 		}
+
+		fmt.Printf("[DEBUG] CreateSupplier - Input: name=%s, code=%s, feed_url=%s, feed_type=%s, feed_format=%s, auth_type=%s\n",
+			input.Name, input.Code, input.FeedURL, input.FeedType, input.FeedFormat, input.AuthType)
 
 		input.ID = uuid.New()
 		input.CreatedAt = time.Now()
@@ -99,11 +103,16 @@ func CreateSupplier(db *database.Postgres) gin.HandlerFunc {
 			input.AuthType = "none"
 		}
 
+		fmt.Printf("[DEBUG] CreateSupplier - After defaults: auth_type=%s, feed_type=%s, max_downloads=%d\n",
+			input.AuthType, input.FeedType, input.MaxDownloadsPerDay)
+
 		if err := db.CreateSupplier(ctx, &input); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			fmt.Printf("[DEBUG] CreateSupplier - DB error: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": fmt.Sprintf("DB error: %v", err)})
 			return
 		}
 
+		fmt.Printf("[DEBUG] CreateSupplier - Success! ID=%s\n", input.ID)
 		c.JSON(http.StatusCreated, gin.H{"success": true, "data": input})
 	}
 }

@@ -57,6 +57,8 @@ func (p *Postgres) ListSuppliers(ctx context.Context) ([]*models.Supplier, error
 			return nil, err
 		}
 		s.ProductCount = productCount
+		// Load current feed for this supplier
+		s.CurrentFeed, _ = p.GetCurrentFeed(ctx, s.ID)
 		suppliers = append(suppliers, &s)
 	}
 

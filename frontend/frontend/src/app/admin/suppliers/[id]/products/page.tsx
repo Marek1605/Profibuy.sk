@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { 
   ArrowLeft, Search, Filter, Package, Image as ImageIcon, 
   ExternalLink, Check, X, Loader2, ChevronLeft, ChevronRight,
-  Tag, Warehouse, Euro, Link2
+  Tag, Warehouse, Euro, Link2, Trash2
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/store';
@@ -78,6 +78,7 @@ export default function SupplierProductsPage() {
   
   // Link all state
   const [linking, setLinking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [linkProgress, setLinkProgress] = useState<{
     status: string;
     total: number;
@@ -254,6 +255,41 @@ export default function SupplierProductsPage() {
     }
   };
 
+  // Delete all supplier products and linked main products
+  const deleteAllProducts = async () => {
+    if (deleting) return;
+    
+    const confirmMsg = 'POZOR! Toto vymaže všetky produkty tohto dodávateľa aj prepojené produkty z hlavného katalógu.\n\nNapíšte "VYMAZAT" pre potvrdenie:';
+    const input = prompt(confirmMsg);
+    
+    if (input !== 'VYMAZAT') {
+      alert('Mazanie zrušené.');
+      return;
+    }
+    
+    setDeleting(true);
+    
+    try {
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/delete-all-products`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`Vymazané! Produkty: ${data.deleted_supplier_products}, Hlavný katalóg: ${data.deleted_main_products}`);
+        loadProducts();
+      } else {
+        alert('Chyba: ' + (data.error || 'Neznáma chyba'));
+      }
+    } catch (err) {
+      console.error('Failed to delete products:', err);
+      alert('Chyba pri mazaní produktov');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -276,24 +312,46 @@ export default function SupplierProductsPage() {
             </p>
           </div>
           
-          {/* Link All Button */}
-          <button
-            onClick={linkAllProducts}
-            disabled={linking || totalProducts === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {linking ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Prepájam...
-              </>
-            ) : (
-              <>
-                <Link2 className="w-4 h-4" />
-                Prepojiť všetko do katalógu
-              </>
-            )}
-          </button>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3">
+            {/* Link All Button */}
+            <button
+              onClick={linkAllProducts}
+              disabled={linking || deleting || totalProducts === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {linking ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Prepájam...
+                </>
+              ) : (
+                <>
+                  <Link2 className="w-4 h-4" />
+                  Prepojiť všetko
+                </>
+              )}
+            </button>
+            
+            {/* Delete All Button */}
+            <button
+              onClick={deleteAllProducts}
+              disabled={linking || deleting || totalProducts === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Mažem...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Vymazať všetko
+                </>
+              )}
+            </button>
+          </div>
         </div>
         
         {/* Link Progress */}

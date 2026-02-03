@@ -180,6 +180,7 @@ func main() {
 			// Link supplier products to main catalog
 			admin.POST("/suppliers/:id/link-all", handlers.LinkAllProducts(db))
 			admin.GET("/suppliers/:id/link/:linkId/progress", handlers.GetLinkProgress(db))
+			admin.DELETE("/suppliers/:id/delete-all-products", handlers.DeleteAllSupplierProducts(db))
 			
 			// Cache management
 			admin.POST("/cache/clear", handlers.ClearCache(redisCache))

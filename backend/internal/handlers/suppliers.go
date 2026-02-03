@@ -1740,3 +1740,39 @@ func generateProductSlug(name, externalID string) string {
 	
 	return slug + "-" + strings.ToLower(externalID)
 }
+
+// DeleteAllSupplierProducts deletes all supplier products and linked main products
+func DeleteAllSupplierProducts(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		supplierID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid supplier ID"})
+			return
+		}
+
+		ctx := context.Background()
+
+		// Delete linked main products first
+		deletedMain, err := db.DeleteLinkedMainProducts(ctx, supplierID)
+		if err != nil {
+			fmt.Printf("[Delete] Error deleting main products: %v\n", err)
+		}
+
+		// Delete supplier products
+		deletedSupplier, err := db.DeleteAllSupplierProducts(ctx, supplierID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		// Also delete supplier categories and brands
+		db.DeleteSupplierCategories(ctx, supplierID)
+		db.DeleteSupplierBrands(ctx, supplierID)
+
+		c.JSON(http.StatusOK, gin.H{
+			"success":                   true,
+			"deleted_supplier_products": deletedSupplier,
+			"deleted_main_products":     deletedMain,
+		})
+	}
+}

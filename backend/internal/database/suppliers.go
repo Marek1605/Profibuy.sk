@@ -1028,3 +1028,41 @@ func (p *Postgres) LinkSupplierProduct(ctx context.Context, supplierProductID, m
 	`, mainProductID, supplierProductID)
 	return err
 }
+
+// DeleteLinkedMainProducts deletes main products linked to supplier products
+func (p *Postgres) DeleteLinkedMainProducts(ctx context.Context, supplierID uuid.UUID) (int, error) {
+	result, err := p.pool.Exec(ctx, `
+		DELETE FROM products 
+		WHERE id IN (
+			SELECT linked_product_id FROM supplier_products 
+			WHERE supplier_id = $1 AND linked_product_id IS NOT NULL
+		)
+	`, supplierID)
+	if err != nil {
+		return 0, err
+	}
+	return int(result.RowsAffected()), nil
+}
+
+// DeleteAllSupplierProducts deletes all supplier products for a supplier
+func (p *Postgres) DeleteAllSupplierProducts(ctx context.Context, supplierID uuid.UUID) (int, error) {
+	result, err := p.pool.Exec(ctx, `
+		DELETE FROM supplier_products WHERE supplier_id = $1
+	`, supplierID)
+	if err != nil {
+		return 0, err
+	}
+	return int(result.RowsAffected()), nil
+}
+
+// DeleteSupplierCategories deletes all supplier categories
+func (p *Postgres) DeleteSupplierCategories(ctx context.Context, supplierID uuid.UUID) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM supplier_categories WHERE supplier_id = $1`, supplierID)
+	return err
+}
+
+// DeleteSupplierBrands deletes all supplier brands
+func (p *Postgres) DeleteSupplierBrands(ctx context.Context, supplierID uuid.UUID) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM supplier_brands WHERE supplier_id = $1`, supplierID)
+	return err
+}

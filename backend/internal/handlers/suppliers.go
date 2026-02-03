@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +16,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 
 	"megashop/internal/database"
 	"megashop/internal/models"
@@ -826,6 +831,27 @@ type ActionAttrValue struct {
 }
 
 // runImport runs the import process in background
+// makeCharsetReader converts various charsets to UTF-8
+func makeCharsetReader(charset string, input io.Reader) (io.Reader, error) {
+	charset = strings.ToLower(charset)
+	switch charset {
+	case "utf-8", "utf8":
+		return input, nil
+	case "iso-8859-1", "iso8859-1", "latin1", "latin-1":
+		return transform.NewReader(input, charmap.ISO8859_1.NewDecoder()), nil
+	case "iso-8859-2", "iso8859-2", "latin2", "latin-2":
+		return transform.NewReader(input, charmap.ISO8859_2.NewDecoder()), nil
+	case "windows-1250", "cp1250":
+		return transform.NewReader(input, charmap.Windows1250.NewDecoder()), nil
+	case "windows-1252", "cp1252":
+		return transform.NewReader(input, charmap.Windows1252.NewDecoder()), nil
+	default:
+		// Try Windows-1252 as fallback (common for European content)
+		fmt.Printf("[Import] Unknown charset '%s', trying Windows-1252\n", charset)
+		return transform.NewReader(input, charmap.Windows1252.NewDecoder()), nil
+	}
+}
+
 func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *models.StoredFeed, feedImport *models.FeedImport) {
 	// Build: 2026-02-03-v3 - XML preprocessing fix with panic recovery
 	ctx := context.Background()
@@ -877,7 +903,7 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 
 	updateProgress("running", "Reading and preprocessing XML...")
 
-	// Read entire file and fix common XML issues (unescaped &)
+	// Read entire file
 	content, err := io.ReadAll(file)
 	if err != nil {
 		fmt.Printf("[Import] ERROR reading file: %v\n", err)
@@ -889,12 +915,72 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		return
 	}
 
-	fmt.Printf("[Import] Read %d bytes, preprocessing...\n", len(content))
+	fmt.Printf("[Import] Read %d bytes, checking if GZIP compressed...\n", len(content))
 
-	// Fix invalid UTF-8 using Go's built-in function
-	contentStr := strings.ToValidUTF8(string(content), "")
+	// Check if GZIP compressed (magic bytes 1f 8b)
+	if len(content) > 2 && content[0] == 0x1f && content[1] == 0x8b {
+		fmt.Printf("[Import] File is GZIP compressed, decompressing...\n")
+		gzReader, err := gzip.NewReader(bytes.NewReader(content))
+		if err != nil {
+			fmt.Printf("[Import] ERROR creating gzip reader: %v\n", err)
+			updateProgress("failed", fmt.Sprintf("Failed to decompress GZIP: %v", err))
+			feedImport.ErrorMessage = err.Error()
+			feedImport.Status = "failed"
+			feedImport.FinishedAt = time.Now()
+			db.UpdateFeedImport(ctx, feedImport)
+			return
+		}
+		
+		content, err = io.ReadAll(gzReader)
+		gzReader.Close()
+		if err != nil {
+			fmt.Printf("[Import] ERROR decompressing: %v\n", err)
+			updateProgress("failed", fmt.Sprintf("Failed to decompress: %v", err))
+			feedImport.ErrorMessage = err.Error()
+			feedImport.Status = "failed"
+			feedImport.FinishedAt = time.Now()
+			db.UpdateFeedImport(ctx, feedImport)
+			return
+		}
+		fmt.Printf("[Import] Decompressed to %d bytes\n", len(content))
+	}
+
+	fmt.Printf("[Import] Preprocessing XML content...\n")
+
+	// Check if XML declares an encoding and potentially fix it
+	// Action XML often declares utf-8 but contains Windows-1252 characters
+	contentStr := string(content)
 	
-	// Remove illegal XML control characters (0x00-0x1F except 0x09, 0x0A, 0x0D)
+	// If XML declares utf-8 but has invalid bytes, try to re-encode from Windows-1252
+	if strings.Contains(contentStr[:min(500, len(contentStr))], `encoding="utf-8"`) {
+		// Check if there are bytes > 127 that aren't valid UTF-8
+		hasInvalidUTF8 := false
+		for i := 0; i < len(content); i++ {
+			if content[i] > 127 {
+				// Check if it's a valid UTF-8 sequence
+				r, size := utf8.DecodeRune(content[i:])
+				if r == utf8.RuneError && size == 1 {
+					hasInvalidUTF8 = true
+					break
+				}
+				i += size - 1
+			}
+		}
+		
+		if hasInvalidUTF8 {
+			fmt.Printf("[Import] XML declares utf-8 but has invalid bytes, converting from Windows-1252...\n")
+			// Decode as Windows-1252 and re-encode as UTF-8
+			decoder := charmap.Windows1252.NewDecoder()
+			utf8Content, _, err := transform.Bytes(decoder, content)
+			if err == nil {
+				content = utf8Content
+				contentStr = string(content)
+				fmt.Printf("[Import] Converted to UTF-8, now %d bytes\n", len(content))
+			}
+		}
+	}
+
+	// Remove illegal XML control characters
 	var cleanBuilder strings.Builder
 	cleanBuilder.Grow(len(contentStr))
 	for _, r := range contentStr {
@@ -903,20 +989,15 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		}
 	}
 	contentStr = cleanBuilder.String()
-	fmt.Printf("[Import] Cleaned, now %d bytes. Fixing ampersands...\n", len(contentStr))
+	fmt.Printf("[Import] Removed control chars, now %d bytes. Fixing ampersands...\n", len(contentStr))
 
-	// Fix unescaped ampersands - Go regex doesn't support lookahead, so use simple replacement
-	// First, protect valid entities by replacing them with unique placeholders
+	// Fix unescaped ampersands
 	contentStr = strings.ReplaceAll(contentStr, "&amp;", "___XAMP___")
 	contentStr = strings.ReplaceAll(contentStr, "&lt;", "___XLT___")
 	contentStr = strings.ReplaceAll(contentStr, "&gt;", "___XGT___")
 	contentStr = strings.ReplaceAll(contentStr, "&quot;", "___XQUOT___")
 	contentStr = strings.ReplaceAll(contentStr, "&apos;", "___XAPOS___")
-	
-	// Now replace all remaining & with &amp;
 	contentStr = strings.ReplaceAll(contentStr, "&", "&amp;")
-	
-	// Restore valid entities
 	contentStr = strings.ReplaceAll(contentStr, "___XAMP___", "&amp;")
 	contentStr = strings.ReplaceAll(contentStr, "___XLT___", "&lt;")
 	contentStr = strings.ReplaceAll(contentStr, "___XGT___", "&gt;")
@@ -924,7 +1005,6 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	contentStr = strings.ReplaceAll(contentStr, "___XAPOS___", "&apos;")
 	
 	content = []byte(contentStr)
-
 	fmt.Printf("[Import] Preprocessing done, starting XML decode (%d bytes)...\n", len(content))
 	updateProgress("running", "Parsing XML...")
 
@@ -932,9 +1012,7 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	var catalog ActionCatalog
 	decoder := xml.NewDecoder(bytes.NewReader(content))
 	decoder.Strict = false
-	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
-		return input, nil // Accept any charset
-	}
+	decoder.CharsetReader = makeCharsetReader
 	
 	fmt.Printf("[Import] XML decoder created, starting Decode()...\n")
 	if err := decoder.Decode(&catalog); err != nil {

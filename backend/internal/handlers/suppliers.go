@@ -889,26 +889,36 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		return
 	}
 
-	fmt.Printf("[Import] Read %d bytes, preprocessing ampersands...\n", len(content))
+	fmt.Printf("[Import] Read %d bytes, preprocessing...\n", len(content))
+
+	// Remove illegal XML control characters (0x00-0x1F except 0x09, 0x0A, 0x0D)
+	cleanContent := make([]byte, 0, len(content))
+	for _, b := range content {
+		if b == 0x09 || b == 0x0A || b == 0x0D || b >= 0x20 {
+			cleanContent = append(cleanContent, b)
+		}
+	}
+	content = cleanContent
+	fmt.Printf("[Import] Removed control chars, now %d bytes. Fixing ampersands...\n", len(content))
 
 	// Fix unescaped ampersands - Go regex doesn't support lookahead, so use simple replacement
-	// First, protect valid entities by replacing them with placeholders
+	// First, protect valid entities by replacing them with unique placeholders
 	contentStr := string(content)
-	contentStr = strings.ReplaceAll(contentStr, "&amp;", "\x00AMP\x00")
-	contentStr = strings.ReplaceAll(contentStr, "&lt;", "\x00LT\x00")
-	contentStr = strings.ReplaceAll(contentStr, "&gt;", "\x00GT\x00")
-	contentStr = strings.ReplaceAll(contentStr, "&quot;", "\x00QUOT\x00")
-	contentStr = strings.ReplaceAll(contentStr, "&apos;", "\x00APOS\x00")
+	contentStr = strings.ReplaceAll(contentStr, "&amp;", "___XAMP___")
+	contentStr = strings.ReplaceAll(contentStr, "&lt;", "___XLT___")
+	contentStr = strings.ReplaceAll(contentStr, "&gt;", "___XGT___")
+	contentStr = strings.ReplaceAll(contentStr, "&quot;", "___XQUOT___")
+	contentStr = strings.ReplaceAll(contentStr, "&apos;", "___XAPOS___")
 	
 	// Now replace all remaining & with &amp;
 	contentStr = strings.ReplaceAll(contentStr, "&", "&amp;")
 	
 	// Restore valid entities
-	contentStr = strings.ReplaceAll(contentStr, "\x00AMP\x00", "&amp;")
-	contentStr = strings.ReplaceAll(contentStr, "\x00LT\x00", "&lt;")
-	contentStr = strings.ReplaceAll(contentStr, "\x00GT\x00", "&gt;")
-	contentStr = strings.ReplaceAll(contentStr, "\x00QUOT\x00", "&quot;")
-	contentStr = strings.ReplaceAll(contentStr, "\x00APOS\x00", "&apos;")
+	contentStr = strings.ReplaceAll(contentStr, "___XAMP___", "&amp;")
+	contentStr = strings.ReplaceAll(contentStr, "___XLT___", "&lt;")
+	contentStr = strings.ReplaceAll(contentStr, "___XGT___", "&gt;")
+	contentStr = strings.ReplaceAll(contentStr, "___XQUOT___", "&quot;")
+	contentStr = strings.ReplaceAll(contentStr, "___XAPOS___", "&apos;")
 	
 	content = []byte(contentStr)
 

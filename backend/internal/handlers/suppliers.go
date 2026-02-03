@@ -892,14 +892,52 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	fmt.Printf("[Import] Read %d bytes, preprocessing...\n", len(content))
 
 	// Remove illegal XML control characters (0x00-0x1F except 0x09, 0x0A, 0x0D)
+	// AND fix invalid UTF-8 sequences
 	cleanContent := make([]byte, 0, len(content))
-	for _, b := range content {
-		if b == 0x09 || b == 0x0A || b == 0x0D || b >= 0x20 {
+	for i := 0; i < len(content); i++ {
+		b := content[i]
+		// Skip control characters except tab, newline, carriage return
+		if b < 0x20 && b != 0x09 && b != 0x0A && b != 0x0D {
+			continue
+		}
+		// Check for valid UTF-8 sequence or ASCII
+		if b < 0x80 {
+			// ASCII - keep it
 			cleanContent = append(cleanContent, b)
+		} else if b < 0xC0 {
+			// Continuation byte without start - skip or replace with space
+			cleanContent = append(cleanContent, ' ')
+		} else if b < 0xE0 {
+			// 2-byte sequence
+			if i+1 < len(content) && content[i+1] >= 0x80 && content[i+1] < 0xC0 {
+				cleanContent = append(cleanContent, b, content[i+1])
+				i++
+			} else {
+				cleanContent = append(cleanContent, ' ')
+			}
+		} else if b < 0xF0 {
+			// 3-byte sequence
+			if i+2 < len(content) && content[i+1] >= 0x80 && content[i+1] < 0xC0 && content[i+2] >= 0x80 && content[i+2] < 0xC0 {
+				cleanContent = append(cleanContent, b, content[i+1], content[i+2])
+				i += 2
+			} else {
+				cleanContent = append(cleanContent, ' ')
+			}
+		} else if b < 0xF8 {
+			// 4-byte sequence
+			if i+3 < len(content) && content[i+1] >= 0x80 && content[i+1] < 0xC0 && content[i+2] >= 0x80 && content[i+2] < 0xC0 && content[i+3] >= 0x80 && content[i+3] < 0xC0 {
+				cleanContent = append(cleanContent, b, content[i+1], content[i+2], content[i+3])
+				i += 3
+			} else {
+				cleanContent = append(cleanContent, ' ')
+			}
+		} else {
+			// Invalid UTF-8 start byte
+			cleanContent = append(cleanContent, ' ')
 		}
 	}
 	content = cleanContent
-	fmt.Printf("[Import] Removed control chars, now %d bytes. Fixing ampersands...\n", len(content))
+	fmt.Printf("[Import] Cleaned invalid chars, now %d bytes. Fixing ampersands...\n", len(content))
 
 	// Fix unescaped ampersands - Go regex doesn't support lookahead, so use simple replacement
 	// First, protect valid entities by replacing them with unique placeholders

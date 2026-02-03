@@ -865,3 +865,18 @@ func (p *Postgres) Migrate() error {
 
 	return nil
 }
+
+// DeleteAllProducts deletes all products from the catalog
+func (p *Postgres) DeleteAllProducts(ctx context.Context) (int, error) {
+	result, err := p.pool.Exec(ctx, `DELETE FROM products`)
+	if err != nil {
+		return 0, err
+	}
+	return int(result.RowsAffected()), nil
+}
+
+// UnlinkAllSupplierProducts removes all linked_product_id references
+func (p *Postgres) UnlinkAllSupplierProducts(ctx context.Context) error {
+	_, err := p.pool.Exec(ctx, `UPDATE supplier_products SET linked_product_id = NULL`)
+	return err
+}

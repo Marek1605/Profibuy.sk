@@ -239,6 +239,30 @@ func DeleteProduct(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFu
 	}
 }
 
+// DeleteAllProducts handles DELETE /api/admin/products/delete-all
+func DeleteAllProducts(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Delete all products
+		count, err := db.DeleteAllProducts(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		// Also unlink all supplier products
+		db.UnlinkAllSupplierProducts(ctx)
+
+		// Invalidate cache
+		if redisCache != nil {
+			redisCache.InvalidateProductLists(ctx)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "deleted": count})
+	}
+}
+
 // BulkUpdateProducts handles POST /api/admin/products/bulk
 func BulkUpdateProducts(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc {
 	return func(c *gin.Context) {

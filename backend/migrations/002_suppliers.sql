@@ -411,3 +411,6 @@ END $$;
 -- Add linked_product_id to supplier_products for linking to main products catalog
 ALTER TABLE supplier_products ADD COLUMN IF NOT EXISTS linked_product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_supplier_products_linked ON supplier_products(linked_product_id);
+
+-- Add unique constraint on external_id for product linking
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_external_id ON products(external_id) WHERE external_id IS NOT NULL AND external_id != '';

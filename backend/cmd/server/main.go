@@ -124,6 +124,7 @@ func main() {
 			
 			// Products CRUD
 			admin.POST("/products", handlers.CreateProduct(db, redisCache))
+			admin.DELETE("/products/delete-all", handlers.DeleteAllProducts(db, redisCache))
 			admin.PUT("/products/:id", handlers.UpdateProduct(db, redisCache))
 			admin.DELETE("/products/:id", handlers.DeleteProduct(db, redisCache))
 			admin.POST("/products/bulk", handlers.BulkUpdateProducts(db, redisCache))

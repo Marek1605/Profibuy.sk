@@ -1728,19 +1728,44 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 }
 
 func generateProductSlug(name, externalID string) string {
-	// Simple slug generation
+	// Comprehensive slug generation
 	slug := strings.ToLower(name)
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "/", "-")
-	slug = strings.ReplaceAll(slug, "\\", "-")
-	slug = strings.ReplaceAll(slug, ".", "-")
-	slug = strings.ReplaceAll(slug, ",", "")
-	slug = strings.ReplaceAll(slug, "'", "")
-	slug = strings.ReplaceAll(slug, "\"", "")
 	
-	// Limit length and add external ID for uniqueness
+	// Replace accented characters
+	replacer := strings.NewReplacer(
+		"á", "a", "ä", "a", "č", "c", "ď", "d", "é", "e", "ě", "e",
+		"í", "i", "ľ", "l", "ĺ", "l", "ň", "n", "ó", "o", "ô", "o",
+		"ŕ", "r", "ř", "r", "š", "s", "ť", "t", "ú", "u", "ů", "u",
+		"ý", "y", "ž", "z", "ö", "o", "ü", "u", "ß", "ss",
+		"ą", "a", "ę", "e", "ł", "l", "ń", "n", "ś", "s", "ź", "z", "ż", "z",
+		" ", "-", "/", "-", "\\", "-", ".", "-", ",", "", "'", "", "\"", "",
+		"(", "", ")", "", "[", "", "]", "", "{", "", "}", "",
+		":", "-", ";", "-", "!", "", "?", "", "&", "-and-", "+", "-plus-",
+		"#", "", "@", "-at-", "%", "-percent-", "*", "", "=", "-",
+		"<", "", ">", "", "|", "-", "~", "-", "`", "", "^", "",
+	)
+	slug = replacer.Replace(slug)
+	
+	// Remove any remaining non-alphanumeric characters except hyphens
+	var result strings.Builder
+	prevHyphen := false
+	for _, r := range slug {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			result.WriteRune(r)
+			prevHyphen = false
+		} else if r == '-' && !prevHyphen && result.Len() > 0 {
+			result.WriteRune('-')
+			prevHyphen = true
+		}
+	}
+	slug = strings.TrimSuffix(result.String(), "-")
+	
+	// Limit length
 	if len(slug) > 100 {
 		slug = slug[:100]
+	}
+	if slug == "" {
+		slug = "product"
 	}
 	
 	return slug + "-" + strings.ToLower(externalID)

@@ -976,6 +976,30 @@ func (p *Postgres) GetOrCreateBrand(ctx context.Context, name string) (*models.B
 
 // UpsertProduct creates or updates a main catalog product
 func (p *Postgres) UpsertProduct(ctx context.Context, product *models.Product) (bool, error) {
+	// First check if product with this external_id exists
+	var existingID uuid.UUID
+	err := p.pool.QueryRow(ctx, `SELECT id FROM products WHERE external_id = $1`, product.ExternalID).Scan(&existingID)
+	
+	if err == nil {
+		// Product exists - update it
+		_, err = p.pool.Exec(ctx, `
+			UPDATE products SET
+				name = $1, description = $2, price = $3, sale_price = $4,
+				stock = $5, category_id = $6, brand_id = $7, images = $8,
+				attributes = $9, weight = $10, updated_at = NOW()
+			WHERE id = $11
+		`, product.Name, product.Description, product.Price, product.SalePrice,
+			product.Stock, product.CategoryID, product.BrandID, product.Images,
+			product.Attributes, product.Weight, existingID)
+		
+		if err != nil {
+			return false, fmt.Errorf("update failed: %w", err)
+		}
+		product.ID = existingID
+		return false, nil
+	}
+	
+	// Product doesn't exist - insert it
 	query := `
 		INSERT INTO products (
 			id, sku, slug, name, description, price, sale_price, currency,
@@ -986,38 +1010,22 @@ func (p *Postgres) UpsertProduct(ctx context.Context, product *models.Product) (
 			$8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $17
 		)
-		ON CONFLICT (slug) DO UPDATE SET
-			name = EXCLUDED.name,
-			description = EXCLUDED.description,
-			price = EXCLUDED.price,
-			sale_price = EXCLUDED.sale_price,
-			stock = EXCLUDED.stock,
-			category_id = EXCLUDED.category_id,
-			brand_id = EXCLUDED.brand_id,
-			images = EXCLUDED.images,
-			attributes = EXCLUDED.attributes,
-			weight = EXCLUDED.weight,
-			updated_at = EXCLUDED.updated_at
-		RETURNING (xmax = 0) as is_new, id
 	`
 	
-	var isNew bool
-	var returnedID uuid.UUID
-	err := p.pool.QueryRow(ctx, query,
+	_, err = p.pool.Exec(ctx, query,
 		product.ID, product.SKU, product.Slug, product.Name, product.Description,
 		product.Price, product.SalePrice,
 		product.Stock, product.CategoryID, product.BrandID,
 		product.Images, product.Attributes,
 		product.ExternalID, product.Status, product.Weight,
 		product.CreatedAt, product.UpdatedAt,
-	).Scan(&isNew, &returnedID)
+	)
 	
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("insert failed: %w", err)
 	}
 	
-	product.ID = returnedID
-	return isNew, nil
+	return true, nil
 }
 
 // LinkSupplierProduct links a supplier product to a main product

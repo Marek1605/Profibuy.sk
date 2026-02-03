@@ -13,6 +13,7 @@ export default function AdminProductsPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
 
   async function loadProducts() {
     setLoading(true)
@@ -33,11 +34,43 @@ export default function AdminProductsPage() {
     loadProducts()
   }
 
+  async function deleteAll() {
+    const input = prompt('POZOR! Toto vymaže VŠETKY produkty z katalógu.\n\nNapíšte "VYMAZAT" pre potvrdenie:')
+    if (input !== 'VYMAZAT') { alert('Mazanie zrušené.'); return }
+    
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/admin/products/delete-all', { 
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` } 
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(`Vymazaných ${data.deleted} produktov`)
+        loadProducts()
+      } else {
+        alert('Chyba: ' + (data.error || 'Neznáma chyba'))
+      }
+    } catch (err) {
+      alert('Chyba pri mazaní')
+    }
+    setDeleting(false)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Produkty ({total})</h1>
-        <Link href="/admin/products/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">+ Novy produkt</Link>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={deleteAll} 
+            disabled={deleting || total === 0}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
+          >
+            {deleting ? 'Mažem...' : 'Vymazať všetko'}
+          </button>
+          <Link href="/admin/products/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">+ Novy produkt</Link>
+        </div>
       </div>
 
       <div className="mb-4">

@@ -828,9 +828,20 @@ type ActionAttrValue struct {
 
 // runImport runs the import process in background
 func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *models.StoredFeed, feedImport *models.FeedImport) {
-	// Build: 2026-02-02-v2 - XML preprocessing fix
+	// Build: 2026-02-03-v3 - XML preprocessing fix with panic recovery
 	ctx := context.Background()
 	startTime := time.Now()
+
+	// Panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[Import] PANIC recovered: %v\n", r)
+			feedImport.Status = "failed"
+			feedImport.ErrorMessage = fmt.Sprintf("Panic: %v", r)
+			feedImport.FinishedAt = time.Now()
+			db.UpdateFeedImport(ctx, feedImport)
+		}
+	}()
 
 	fmt.Printf("[Import] Starting import for supplier %s, feed: %s\n", supplier.Code, storedFeed.FilePath)
 
@@ -886,7 +897,7 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	reAmp := regexp.MustCompile(`&(?!(amp|lt|gt|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);)`)
 	content = reAmp.ReplaceAll(content, []byte("&amp;"))
 
-	fmt.Printf("[Import] Preprocessing done, parsing XML...\n")
+	fmt.Printf("[Import] Preprocessing done, starting XML decode (%d bytes)...\n", len(content))
 	updateProgress("running", "Parsing XML...")
 
 	// Parse XML
@@ -896,7 +907,10 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
 		return input, nil // Accept any charset
 	}
+	
+	fmt.Printf("[Import] XML decoder created, starting Decode()...\n")
 	if err := decoder.Decode(&catalog); err != nil {
+		fmt.Printf("[Import] ERROR: XML decode failed: %v\n", err)
 		updateProgress("failed", fmt.Sprintf("Failed to parse XML: %v", err))
 		feedImport.ErrorMessage = err.Error()
 		feedImport.Status = "failed"
@@ -904,6 +918,11 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		db.UpdateFeedImport(ctx, feedImport)
 		return
 	}
+
+	fmt.Printf("[Import] XML parsed OK! Categories: %d, Producers: %d, Products: %d\n", 
+		len(catalog.Categories.MainCategories), 
+		len(catalog.Producers.Producers), 
+		len(catalog.Products.Products))
 
 	// Process categories
 	updateProgress("running", fmt.Sprintf("Processing %d categories...", len(catalog.Categories.MainCategories)))

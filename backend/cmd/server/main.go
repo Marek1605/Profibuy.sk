@@ -123,6 +123,7 @@ func main() {
 			admin.GET("/stats", handlers.GetStats(db, redisCache))
 			
 			// Products CRUD
+			admin.GET("/products", handlers.ListProducts(db, redisCache, searchEngine))
 			admin.POST("/products", handlers.CreateProduct(db, redisCache))
 			admin.DELETE("/products/delete-all", handlers.DeleteAllProducts(db, redisCache))
 			admin.PUT("/products/:id", handlers.UpdateProduct(db, redisCache))

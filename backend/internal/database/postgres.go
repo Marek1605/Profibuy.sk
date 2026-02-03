@@ -164,8 +164,10 @@ func (p *Postgres) ListProducts(ctx context.Context, filter models.ProductFilter
 
 	// Main query
 	query := fmt.Sprintf(`
-		SELECT id, sku, slug, name, description, price, sale_price, currency, stock, 
-			   category_id, brand_id, images, attributes, meta_title, meta_description,
+		SELECT id, COALESCE(sku, ''), slug, name, COALESCE(description, ''), price, sale_price, 
+			   COALESCE(currency, 'EUR'), stock, 
+			   category_id, brand_id, COALESCE(images, '[]'), COALESCE(attributes, '[]'), 
+			   COALESCE(meta_title, ''), COALESCE(meta_description, ''),
 			   status, weight, created_at, updated_at
 		FROM products 
 		WHERE %s 
@@ -209,8 +211,10 @@ func (p *Postgres) ListProducts(ctx context.Context, filter models.ProductFilter
 // GetProduct by ID
 func (p *Postgres) GetProduct(ctx context.Context, id uuid.UUID) (*models.Product, error) {
 	query := `
-		SELECT id, sku, slug, name, description, price, sale_price, currency, stock, 
-			   category_id, brand_id, images, attributes, variants, meta_title, meta_description,
+		SELECT id, COALESCE(sku, ''), slug, name, COALESCE(description, ''), price, sale_price, 
+			   COALESCE(currency, 'EUR'), stock, 
+			   category_id, brand_id, COALESCE(images, '[]'), COALESCE(attributes, '[]'), 
+			   COALESCE(variants, '[]'), COALESCE(meta_title, ''), COALESCE(meta_description, ''),
 			   status, weight, created_at, updated_at
 		FROM products 
 		WHERE id = $1
@@ -237,8 +241,10 @@ func (p *Postgres) GetProduct(ctx context.Context, id uuid.UUID) (*models.Produc
 // GetProductBySlug
 func (p *Postgres) GetProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
 	query := `
-		SELECT id, sku, slug, name, description, price, sale_price, currency, stock, 
-			   category_id, brand_id, images, attributes, variants, meta_title, meta_description,
+		SELECT id, COALESCE(sku, ''), slug, name, COALESCE(description, ''), price, sale_price, 
+			   COALESCE(currency, 'EUR'), stock, 
+			   category_id, brand_id, COALESCE(images, '[]'), COALESCE(attributes, '[]'), 
+			   COALESCE(variants, '[]'), COALESCE(meta_title, ''), COALESCE(meta_description, ''),
 			   status, weight, created_at, updated_at
 		FROM products 
 		WHERE slug = $1 AND status = 'active'

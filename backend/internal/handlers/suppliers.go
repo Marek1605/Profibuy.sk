@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1171,9 +1172,13 @@ func buildActionImageURL(partialPath string, cdn *ActionCDNConfig) string {
 		// Return partial path if no CDN config
 		return partialPath
 	}
+	// URL encode the parameters - especially PID which may contain + and =
+	encodedPID := url.QueryEscape(cdn.PID)
+	encodedPath := url.QueryEscape(partialPath)
+	
 	// URL: https://cdn.action.pl/File.aspx?CID=XXX&UID=YYY&PID=ZZZ&P=WWW
 	return fmt.Sprintf("https://cdn.action.pl/File.aspx?CID=%s&UID=%s&PID=%s&P=%s",
-		cdn.CID, cdn.UID, cdn.PID, partialPath)
+		cdn.CID, cdn.UID, encodedPID, encodedPath)
 }
 
 // parseActionProduct converts Action XML product to SupplierProduct model

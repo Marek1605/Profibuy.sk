@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -890,12 +889,28 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		return
 	}
 
-	fmt.Printf("[Import] Read %d bytes, preprocessing...\n", len(content))
+	fmt.Printf("[Import] Read %d bytes, preprocessing ampersands...\n", len(content))
 
-	// Fix unescaped ampersands (& not followed by amp; lt; gt; quot; apos; or #)
-	// This regex finds & not followed by valid entity patterns
-	reAmp := regexp.MustCompile(`&(?!(amp|lt|gt|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);)`)
-	content = reAmp.ReplaceAll(content, []byte("&amp;"))
+	// Fix unescaped ampersands - Go regex doesn't support lookahead, so use simple replacement
+	// First, protect valid entities by replacing them with placeholders
+	contentStr := string(content)
+	contentStr = strings.ReplaceAll(contentStr, "&amp;", "\x00AMP\x00")
+	contentStr = strings.ReplaceAll(contentStr, "&lt;", "\x00LT\x00")
+	contentStr = strings.ReplaceAll(contentStr, "&gt;", "\x00GT\x00")
+	contentStr = strings.ReplaceAll(contentStr, "&quot;", "\x00QUOT\x00")
+	contentStr = strings.ReplaceAll(contentStr, "&apos;", "\x00APOS\x00")
+	
+	// Now replace all remaining & with &amp;
+	contentStr = strings.ReplaceAll(contentStr, "&", "&amp;")
+	
+	// Restore valid entities
+	contentStr = strings.ReplaceAll(contentStr, "\x00AMP\x00", "&amp;")
+	contentStr = strings.ReplaceAll(contentStr, "\x00LT\x00", "&lt;")
+	contentStr = strings.ReplaceAll(contentStr, "\x00GT\x00", "&gt;")
+	contentStr = strings.ReplaceAll(contentStr, "\x00QUOT\x00", "&quot;")
+	contentStr = strings.ReplaceAll(contentStr, "\x00APOS\x00", "&apos;")
+	
+	content = []byte(contentStr)
 
 	fmt.Printf("[Import] Preprocessing done, starting XML decode (%d bytes)...\n", len(content))
 	updateProgress("running", "Parsing XML...")

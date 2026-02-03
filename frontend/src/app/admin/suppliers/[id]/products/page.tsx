@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { 
   ArrowLeft, Search, Filter, Package, Image as ImageIcon, 
   ExternalLink, Check, X, Loader2, ChevronLeft, ChevronRight,
-  Tag, Warehouse, Euro
+  Tag, Warehouse, Euro, Link2
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/store';
@@ -75,6 +75,18 @@ export default function SupplierProductsPage() {
   const [brands, setBrands] = useState<SupplierBrand[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalProducts, setTotalProducts] = useState(0);
+  
+  // Link all state
+  const [linking, setLinking] = useState(false);
+  const [linkProgress, setLinkProgress] = useState<{
+    status: string;
+    total: number;
+    processed: number;
+    created: number;
+    updated: number;
+    errors: number;
+    message: string;
+  } | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -194,6 +206,54 @@ export default function SupplierProductsPage() {
     return main?.url || images?.[0]?.url || null;
   };
 
+  // Link all products to main catalog
+  const linkAllProducts = async () => {
+    if (linking) return;
+    
+    if (!confirm('Prepojiť všetky produkty do hlavného katalógu? Toto vytvorí produkty, kategórie a značky.')) {
+      return;
+    }
+    
+    setLinking(true);
+    setLinkProgress(null);
+    
+    try {
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/link-all`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      
+      if (data.success && data.link_id) {
+        // Poll for progress
+        const pollProgress = async () => {
+          const progressRes = await fetch(
+            `${API_BASE}/admin/suppliers/${supplierId}/link/${data.link_id}/progress`,
+            { headers: authHeaders() }
+          );
+          const progressData = await progressRes.json();
+          
+          if (progressData.success && progressData.data) {
+            setLinkProgress(progressData.data);
+            
+            if (progressData.data.status === 'running') {
+              setTimeout(pollProgress, 1000);
+            } else {
+              setLinking(false);
+              // Reload products after linking
+              loadProducts();
+            }
+          }
+        };
+        
+        pollProgress();
+      }
+    } catch (err) {
+      console.error('Failed to link products:', err);
+      setLinking(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -215,7 +275,61 @@ export default function SupplierProductsPage() {
               {totalProducts.toLocaleString()} produktov
             </p>
           </div>
+          
+          {/* Link All Button */}
+          <button
+            onClick={linkAllProducts}
+            disabled={linking || totalProducts === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {linking ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Prepájam...
+              </>
+            ) : (
+              <>
+                <Link2 className="w-4 h-4" />
+                Prepojiť všetko do katalógu
+              </>
+            )}
+          </button>
         </div>
+        
+        {/* Link Progress */}
+        {linkProgress && (
+          <div className={`mt-4 p-4 rounded-lg ${
+            linkProgress.status === 'completed' ? 'bg-green-50 border border-green-200' :
+            linkProgress.status === 'failed' ? 'bg-red-50 border border-red-200' :
+            'bg-blue-50 border border-blue-200'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">
+                {linkProgress.status === 'running' && 'Prepájam produkty...'}
+                {linkProgress.status === 'completed' && '✓ Prepojenie dokončené!'}
+                {linkProgress.status === 'failed' && '✗ Chyba pri prepájaní'}
+              </span>
+              <span className="text-sm text-gray-500">
+                {linkProgress.processed} / {linkProgress.total}
+              </span>
+            </div>
+            {linkProgress.status === 'running' && (
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(linkProgress.processed / linkProgress.total) * 100}%` }}
+                />
+              </div>
+            )}
+            <p className="text-sm text-gray-600">{linkProgress.message}</p>
+            {linkProgress.status === 'completed' && (
+              <p className="text-sm text-green-700 mt-1">
+                Vytvorených: {linkProgress.created}, Aktualizovaných: {linkProgress.updated}
+                {linkProgress.errors > 0 && `, Chýb: ${linkProgress.errors}`}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filters */}

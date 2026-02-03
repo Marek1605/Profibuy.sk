@@ -1496,3 +1496,208 @@ func PreviewFeed(db *database.Postgres) gin.HandlerFunc {
 }
 
 
+
+// LinkAllProducts links all supplier products to main catalog
+func LinkAllProducts(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		supplierID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid supplier ID"})
+			return
+		}
+
+		ctx := context.Background()
+
+		// Get supplier
+		supplier, err := db.GetSupplier(ctx, supplierID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Supplier not found"})
+			return
+		}
+
+		// Start linking in background
+		linkID := uuid.New().String()
+		
+		go runLinkAll(db, supplier, linkID)
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"link_id": linkID,
+			"message": "Linking started in background",
+		})
+	}
+}
+
+// Progress tracking for link operation
+var linkProgressMu sync.Mutex
+var linkProgress = make(map[string]*LinkProgress)
+
+type LinkProgress struct {
+	Status      string `json:"status"`
+	Total       int    `json:"total"`
+	Processed   int    `json:"processed"`
+	Created     int    `json:"created"`
+	Updated     int    `json:"updated"`
+	Errors      int    `json:"errors"`
+	Message     string `json:"message"`
+}
+
+func GetLinkProgress(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		linkID := c.Param("linkId")
+		
+		linkProgressMu.Lock()
+		progress, exists := linkProgress[linkID]
+		linkProgressMu.Unlock()
+		
+		if !exists {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Link operation not found"})
+			return
+		}
+		
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": progress})
+	}
+}
+
+func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string) {
+	ctx := context.Background()
+	
+	progress := &LinkProgress{
+		Status:  "running",
+		Message: "Starting...",
+	}
+	
+	linkProgressMu.Lock()
+	linkProgress[linkID] = progress
+	linkProgressMu.Unlock()
+	
+	defer func() {
+		if r := recover(); r != nil {
+			progress.Status = "failed"
+			progress.Message = fmt.Sprintf("Panic: %v", r)
+		}
+	}()
+	
+	// Get all unlinked supplier products
+	products, err := db.GetUnlinkedSupplierProducts(ctx, supplier.ID)
+	if err != nil {
+		progress.Status = "failed"
+		progress.Message = fmt.Sprintf("Failed to get products: %v", err)
+		return
+	}
+	
+	progress.Total = len(products)
+	progress.Message = fmt.Sprintf("Processing %d products...", len(products))
+	
+	// Category cache
+	categoryCache := make(map[string]uuid.UUID)
+	brandCache := make(map[string]uuid.UUID)
+	
+	for i, sp := range products {
+		// Get or create category
+		var categoryID *uuid.UUID
+		categoryKey := sp.MainCategoryTree
+		if categoryKey != "" {
+			if catID, ok := categoryCache[categoryKey]; ok {
+				categoryID = &catID
+			} else {
+				cat, err := db.GetOrCreateCategoryByPath(ctx, sp.MainCategoryTree, sp.CategoryTree, sp.SubCategoryTree)
+				if err == nil && cat != nil {
+					categoryCache[categoryKey] = cat.ID
+					categoryID = &cat.ID
+				}
+			}
+		}
+		
+		// Get or create brand
+		var brandID *uuid.UUID
+		if sp.ProducerName != "" {
+			if brID, ok := brandCache[sp.ProducerName]; ok {
+				brandID = &brID
+			} else {
+				brand, err := db.GetOrCreateBrand(ctx, sp.ProducerName)
+				if err == nil && brand != nil {
+					brandCache[sp.ProducerName] = brand.ID
+					brandID = &brand.ID
+				}
+			}
+		}
+		
+		// Create main product
+		mainProduct := &models.Product{
+			ID:          uuid.New(),
+			SKU:         sp.ExternalID,
+			Slug:        generateSlug(sp.Name, sp.ExternalID),
+			Name:        sp.Name,
+			Description: sp.Description,
+			Price:       sp.PriceVAT,
+			Stock:       sp.Stock,
+			CategoryID:  categoryID,
+			BrandID:     brandID,
+			Images:      sp.Images,
+			Attributes:  sp.TechnicalSpecs,
+			ExternalID:  sp.ExternalID,
+			Status:      "active",
+			Weight:      sp.Weight,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		
+		// Use sale price if available
+		if sp.SRP > 0 && sp.SRP > sp.PriceVAT {
+			mainProduct.Price = sp.SRP
+			salePrice := sp.PriceVAT
+			mainProduct.SalePrice = &salePrice
+		}
+		
+		// Upsert product
+		isNew, err := db.UpsertProduct(ctx, mainProduct)
+		if err != nil {
+			progress.Errors++
+			fmt.Printf("[Link] Error creating product %s: %v\n", sp.Name, err)
+		} else {
+			// Link supplier product to main product
+			err = db.LinkSupplierProduct(ctx, sp.ID, mainProduct.ID)
+			if err != nil {
+				fmt.Printf("[Link] Error linking product %s: %v\n", sp.Name, err)
+			}
+			
+			if isNew {
+				progress.Created++
+			} else {
+				progress.Updated++
+			}
+		}
+		
+		progress.Processed++
+		
+		// Update progress every 100 products
+		if (i+1) % 100 == 0 || i == len(products)-1 {
+			progress.Message = fmt.Sprintf("Processed %d/%d (created: %d, updated: %d)", 
+				progress.Processed, progress.Total, progress.Created, progress.Updated)
+		}
+	}
+	
+	progress.Status = "completed"
+	progress.Message = fmt.Sprintf("Completed! Created: %d, Updated: %d, Errors: %d", 
+		progress.Created, progress.Updated, progress.Errors)
+}
+
+func generateSlug(name, externalID string) string {
+	// Simple slug generation
+	slug := strings.ToLower(name)
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = strings.ReplaceAll(slug, "/", "-")
+	slug = strings.ReplaceAll(slug, "\\", "-")
+	slug = strings.ReplaceAll(slug, ".", "-")
+	slug = strings.ReplaceAll(slug, ",", "")
+	slug = strings.ReplaceAll(slug, "'", "")
+	slug = strings.ReplaceAll(slug, "\"", "")
+	
+	// Limit length and add external ID for uniqueness
+	if len(slug) > 100 {
+		slug = slug[:100]
+	}
+	
+	return slug + "-" + strings.ToLower(externalID)
+}

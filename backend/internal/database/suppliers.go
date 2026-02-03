@@ -854,3 +854,180 @@ func (p *Postgres) ListSupplierBrands(ctx context.Context, supplierID uuid.UUID)
 
 	return brands, nil
 }
+
+// GetUnlinkedSupplierProducts returns supplier products not yet linked to main catalog
+func (p *Postgres) GetUnlinkedSupplierProducts(ctx context.Context, supplierID uuid.UUID) ([]*models.SupplierProduct, error) {
+	query := `
+		SELECT id, supplier_id, external_id, ean, manufacturer_part_number,
+			   name, description,
+			   COALESCE(price_net, 0), COALESCE(price_vat, 0), COALESCE(vat_rate, 0), COALESCE(srp, 0),
+			   COALESCE(stock, 0), COALESCE(stock_status, ''), COALESCE(on_order, false),
+			   COALESCE(main_category_tree, ''), COALESCE(category_tree, ''), COALESCE(sub_category_tree, ''),
+			   COALESCE(producer_id_external, ''), COALESCE(producer_name, ''),
+			   COALESCE(images, '[]'), COALESCE(technical_specs, '{}'),
+			   COALESCE(weight, 0)
+		FROM supplier_products
+		WHERE supplier_id = $1 AND linked_product_id IS NULL
+		ORDER BY name
+	`
+	
+	rows, err := p.pool.Query(ctx, query, supplierID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var products []*models.SupplierProduct
+	for rows.Next() {
+		var sp models.SupplierProduct
+		var imagesJSON, specsJSON []byte
+		
+		err := rows.Scan(
+			&sp.ID, &sp.SupplierID, &sp.ExternalID, &sp.EAN, &sp.ManufacturerPartNumber,
+			&sp.Name, &sp.Description,
+			&sp.PriceNet, &sp.PriceVAT, &sp.VATRate, &sp.SRP,
+			&sp.Stock, &sp.StockStatus, &sp.OnOrder,
+			&sp.MainCategoryTree, &sp.CategoryTree, &sp.SubCategoryTree,
+			&sp.ProducerIDExternal, &sp.ProducerName,
+			&imagesJSON, &specsJSON,
+			&sp.Weight,
+		)
+		if err != nil {
+			return nil, err
+		}
+		
+		json.Unmarshal(imagesJSON, &sp.Images)
+		json.Unmarshal(specsJSON, &sp.TechnicalSpecs)
+		
+		products = append(products, &sp)
+	}
+	
+	return products, nil
+}
+
+// GetOrCreateCategoryByPath finds or creates category hierarchy
+func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, subsub string) (*models.Category, error) {
+	// Use the most specific category available
+	categoryName := main
+	if sub != "" {
+		categoryName = sub
+	}
+	if subsub != "" {
+		categoryName = subsub
+	}
+	
+	if categoryName == "" {
+		return nil, nil
+	}
+	
+	// Check if exists
+	var cat models.Category
+	err := p.pool.QueryRow(ctx, `SELECT id, name, slug FROM categories WHERE name = $1`, categoryName).Scan(&cat.ID, &cat.Name, &cat.Slug)
+	if err == nil {
+		return &cat, nil
+	}
+	
+	// Create new category
+	cat.ID = uuid.New()
+	cat.Name = categoryName
+	cat.Slug = strings.ToLower(strings.ReplaceAll(categoryName, " ", "-"))
+	
+	_, err = p.pool.Exec(ctx, `
+		INSERT INTO categories (id, name, slug, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (slug) DO NOTHING
+	`, cat.ID, cat.Name, cat.Slug)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return &cat, nil
+}
+
+// GetOrCreateBrand finds or creates a brand
+func (p *Postgres) GetOrCreateBrand(ctx context.Context, name string) (*models.Brand, error) {
+	if name == "" {
+		return nil, nil
+	}
+	
+	var brand models.Brand
+	err := p.pool.QueryRow(ctx, `SELECT id, name, slug FROM brands WHERE name = $1`, name).Scan(&brand.ID, &brand.Name, &brand.Slug)
+	if err == nil {
+		return &brand, nil
+	}
+	
+	brand.ID = uuid.New()
+	brand.Name = name
+	brand.Slug = strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	
+	_, err = p.pool.Exec(ctx, `
+		INSERT INTO brands (id, name, slug, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (slug) DO NOTHING
+	`, brand.ID, brand.Name, brand.Slug)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return &brand, nil
+}
+
+// UpsertProduct creates or updates a main catalog product
+func (p *Postgres) UpsertProduct(ctx context.Context, product *models.Product) (bool, error) {
+	imagesJSON, _ := json.Marshal(product.Images)
+	attrsJSON, _ := json.Marshal(product.Attributes)
+	
+	query := `
+		INSERT INTO products (
+			id, sku, slug, name, description, price, sale_price, currency,
+			stock, category_id, brand_id, images, attributes, 
+			external_id, status, weight, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, 'EUR',
+			$8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17
+		)
+		ON CONFLICT (slug) DO UPDATE SET
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			price = EXCLUDED.price,
+			sale_price = EXCLUDED.sale_price,
+			stock = EXCLUDED.stock,
+			category_id = EXCLUDED.category_id,
+			brand_id = EXCLUDED.brand_id,
+			images = EXCLUDED.images,
+			attributes = EXCLUDED.attributes,
+			weight = EXCLUDED.weight,
+			updated_at = EXCLUDED.updated_at
+		RETURNING (xmax = 0) as is_new, id
+	`
+	
+	var isNew bool
+	var returnedID uuid.UUID
+	err := p.pool.QueryRow(ctx, query,
+		product.ID, product.SKU, product.Slug, product.Name, product.Description,
+		product.Price, product.SalePrice,
+		product.Stock, product.CategoryID, product.BrandID,
+		imagesJSON, attrsJSON,
+		product.ExternalID, product.Status, product.Weight,
+		product.CreatedAt, product.UpdatedAt,
+	).Scan(&isNew, &returnedID)
+	
+	if err != nil {
+		return false, err
+	}
+	
+	product.ID = returnedID
+	return isNew, nil
+}
+
+// LinkSupplierProduct links a supplier product to a main product
+func (p *Postgres) LinkSupplierProduct(ctx context.Context, supplierProductID, mainProductID uuid.UUID) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE supplier_products SET linked_product_id = $1, updated_at = NOW()
+		WHERE id = $2
+	`, mainProductID, supplierProductID)
+	return err
+}

@@ -177,6 +177,10 @@ func main() {
 			admin.GET("/suppliers/:id/categories", handlers.ListSupplierCategories(db))
 			admin.GET("/suppliers/:id/brands", handlers.ListSupplierBrands(db))
 			
+			// Link supplier products to main catalog
+			admin.POST("/suppliers/:id/link-all", handlers.LinkAllProducts(db))
+			admin.GET("/suppliers/:id/link/:linkId/progress", handlers.GetLinkProgress(db))
+			
 			// Cache management
 			admin.POST("/cache/clear", handlers.ClearCache(redisCache))
 			admin.POST("/cache/warmup", handlers.WarmupCache(db, redisCache))

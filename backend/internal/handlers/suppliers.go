@@ -1666,7 +1666,7 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 		mainProduct := &models.Product{
 			ID:          uuid.New(),
 			SKU:         sp.ExternalID,
-			Slug:        generateSlug(sp.Name, sp.ExternalID),
+			Slug:        generateProductSlug(sp.Name, sp.ExternalID),
 			Name:        sp.Name,
 			Description: sp.Description,
 			Price:       sp.PriceVAT,
@@ -1722,7 +1722,7 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 		progress.Created, progress.Updated, progress.Errors)
 }
 
-func generateSlug(name, externalID string) string {
+func generateProductSlug(name, externalID string) string {
 	// Simple slug generation
 	slug := strings.ToLower(name)
 	slug = strings.ReplaceAll(slug, " ", "-")

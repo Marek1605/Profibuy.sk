@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ArrowLeft, Save, Trash2, Loader2, Truck, Settings, Globe,
-  Download, FileText, AlertCircle, Check
+  Download, FileText, AlertCircle, Check, Image as ImageIcon
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/store';
@@ -61,6 +61,10 @@ export default function SupplierDetailPage() {
     feed_format: 'action',
     auth_type: 'none',
     auth_credentials: '',
+    // Action CDN credentials
+    action_cid: '',
+    action_uid: '',
+    action_pid: '',
     max_downloads_per_day: 8,
     is_active: true,
     priority: 0,
@@ -73,6 +77,17 @@ export default function SupplierDetailPage() {
       const data = await res.json();
       if (data.success) {
         setSupplier(data.data);
+        
+        // Parse Action CDN credentials from auth_credentials JSON
+        let actionCid = '';
+        let actionUid = '';
+        let actionPid = '';
+        if (data.data.auth_credentials && typeof data.data.auth_credentials === 'object') {
+          actionCid = data.data.auth_credentials.action_cid || '';
+          actionUid = data.data.auth_credentials.action_uid || '';
+          actionPid = data.data.auth_credentials.action_pid || '';
+        }
+        
         setFormData({
           name: data.data.name || '',
           code: data.data.code || '',
@@ -81,7 +96,10 @@ export default function SupplierDetailPage() {
           feed_type: data.data.feed_type || 'xml',
           feed_format: data.data.feed_format || 'action',
           auth_type: data.data.auth_type || 'none',
-          auth_credentials: data.data.auth_credentials || '',
+          auth_credentials: typeof data.data.auth_credentials === 'string' ? data.data.auth_credentials : '',
+          action_cid: actionCid,
+          action_uid: actionUid,
+          action_pid: actionPid,
           max_downloads_per_day: data.data.max_downloads_per_day || 8,
           is_active: data.data.is_active ?? true,
           priority: data.data.priority || 0,
@@ -105,10 +123,24 @@ export default function SupplierDetailPage() {
     setSuccess(null);
 
     try {
+      // Build auth_credentials JSON for Action CDN
+      const authCredentials = formData.feed_format === 'action' && (formData.action_cid || formData.action_uid || formData.action_pid)
+        ? {
+            action_cid: formData.action_cid,
+            action_uid: formData.action_uid,
+            action_pid: formData.action_pid,
+          }
+        : formData.auth_credentials || {};
+      
+      const payload = {
+        ...formData,
+        auth_credentials: authCredentials,
+      };
+      
       const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
@@ -356,6 +388,54 @@ export default function SupplierDetailPage() {
                   </div>
                 )}
               </div>
+              
+              {/* Action CDN Settings - show only for Action format */}
+              {formData.feed_format === 'action' && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    Action CDN - Nastavenie obrázkov
+                  </h3>
+                  <p className="text-sm text-blue-700 mb-3">
+                    Pre sťahovanie obrázkov z Action CDN zadajte vaše prihlasovacie údaje z Action portálu.
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1">CID (Company ID)</label>
+                      <input
+                        type="text"
+                        value={formData.action_cid}
+                        onChange={(e) => setFormData({ ...formData, action_cid: e.target.value })}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="napr. 00001"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1">UID (Login)</label>
+                      <input
+                        type="text"
+                        value={formData.action_uid}
+                        onChange={(e) => setFormData({ ...formData, action_uid: e.target.value })}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="login bez prefixu"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1">PID (Auth Key)</label>
+                      <input
+                        type="password"
+                        value={formData.action_pid}
+                        onChange={(e) => setFormData({ ...formData, action_pid: e.target.value })}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="Unique Authentication Key"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    Tieto údaje nájdete v Action B2B portáli v sekcii "Unique Authentication Key"
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

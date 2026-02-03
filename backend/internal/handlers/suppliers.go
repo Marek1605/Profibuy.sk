@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -1089,10 +1090,26 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	feedImport.TotalItems = totalProducts
 	updateProgress("running", fmt.Sprintf("Processing %d products...", totalProducts))
 
+	// Extract Action CDN config from supplier auth_credentials
+	var cdnConfig *ActionCDNConfig
+	if supplier.FeedFormat == "action" && len(supplier.AuthCredentials) > 0 {
+		var authCreds map[string]string
+		if err := json.Unmarshal(supplier.AuthCredentials, &authCreds); err == nil {
+			if authCreds["action_cid"] != "" && authCreds["action_uid"] != "" && authCreds["action_pid"] != "" {
+				cdnConfig = &ActionCDNConfig{
+					CID: authCreds["action_cid"],
+					UID: authCreds["action_uid"],
+					PID: authCreds["action_pid"],
+				}
+				fmt.Printf("[Import] Using Action CDN config: CID=%s, UID=%s\n", cdnConfig.CID, cdnConfig.UID)
+			}
+		}
+	}
+
 	batchSize := 500
 	for i, product := range catalog.Products.Products {
-		// Parse product
-		supProduct := parseActionProduct(supplier.ID, &product, producerMap)
+		// Parse product with CDN config
+		supProduct := parseActionProduct(supplier.ID, &product, producerMap, cdnConfig)
 
 		// Upsert to database
 		isNew, err := db.UpsertSupplierProduct(ctx, supProduct)
@@ -1141,8 +1158,26 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 	}()
 }
 
+// ActionCDNConfig holds credentials for Action.pl image CDN
+type ActionCDNConfig struct {
+	CID string `json:"action_cid"` // Company ID
+	UID string `json:"action_uid"` // User login
+	PID string `json:"action_pid"` // Unique Authentication Key
+}
+
+// buildActionImageURL constructs full Action CDN URL from partial path
+func buildActionImageURL(partialPath string, cdn *ActionCDNConfig) string {
+	if cdn == nil || cdn.CID == "" || cdn.UID == "" || cdn.PID == "" {
+		// Return partial path if no CDN config
+		return partialPath
+	}
+	// URL: https://cdn.action.pl/File.aspx?CID=XXX&UID=YYY&PID=ZZZ&P=WWW
+	return fmt.Sprintf("https://cdn.action.pl/File.aspx?CID=%s&UID=%s&PID=%s&P=%s",
+		cdn.CID, cdn.UID, cdn.PID, partialPath)
+}
+
 // parseActionProduct converts Action XML product to SupplierProduct model
-func parseActionProduct(supplierID uuid.UUID, p *ActionProduct, producerMap map[string]string) *models.SupplierProduct {
+func parseActionProduct(supplierID uuid.UUID, p *ActionProduct, producerMap map[string]string, cdnConfig *ActionCDNConfig) *models.SupplierProduct {
 	product := &models.SupplierProduct{
 		ID:         uuid.New(),
 		SupplierID: supplierID,
@@ -1237,11 +1272,11 @@ func parseActionProduct(supplierID uuid.UUID, p *ActionProduct, producerMap map[
 		}
 	}
 
-	// Images
+	// Images - build full CDN URLs
 	images := make([]models.ProductImage, 0, len(p.Images))
 	for _, img := range p.Images {
 		images = append(images, models.ProductImage{
-			URL:       img.URL,
+			URL:       buildActionImageURL(img.URL, cdnConfig),
 			IsMain:    img.IsMain == "1",
 			Date:      img.Date,
 			Copyright: img.Copyright == "1",
@@ -1249,11 +1284,11 @@ func parseActionProduct(supplierID uuid.UUID, p *ActionProduct, producerMap map[
 	}
 	product.Images = images
 
-	// Multimedia
+	// Multimedia - build full CDN URLs
 	multimedia := make([]models.ProductMultimedia, 0, len(p.Multimedia))
 	for _, mm := range p.Multimedia {
 		multimedia = append(multimedia, models.ProductMultimedia{
-			URL:         mm.URL,
+			URL:         buildActionImageURL(mm.URL, cdnConfig),
 			Description: mm.Description,
 			Type:        mm.Type,
 			Copyright:   mm.Copyright == "1",

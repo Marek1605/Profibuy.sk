@@ -902,9 +902,6 @@ func (p *Postgres) GetUnlinkedSupplierProducts(ctx context.Context, supplierID u
 		products = append(products, &sp)
 	}
 	
-	return products, nil
-}
-
 // GetOrCreateCategoryByPath finds or creates category hierarchy (main -> sub -> subsub)
 // Returns the deepest category in the hierarchy
 func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, subsub string) (*models.Category, error) {

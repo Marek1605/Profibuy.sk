@@ -389,6 +389,7 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 	}
 
 	return nil
+}
 
 // ListCategories returns all categories with proper NULL handling
 func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error) {

@@ -396,7 +396,7 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error) {
 	query := `
 		SELECT id, parent_id, slug, name, description, image, position, 
-			   meta_title, meta_description, product_count, path, created_at, updated_at
+			   meta_title, meta_description, product_count, path::text, created_at, updated_at
 		FROM categories 
 		ORDER BY position, name
 	`
@@ -427,7 +427,7 @@ func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error
 func (p *Postgres) GetCategory(ctx context.Context, slug string) (*models.Category, error) {
 	query := `
 		SELECT id, parent_id, slug, name, description, image, position, 
-			   meta_title, meta_description, product_count, path, created_at, updated_at
+			   meta_title, meta_description, product_count, path::text, created_at, updated_at
 		FROM categories 
 		WHERE slug = $1
 	`

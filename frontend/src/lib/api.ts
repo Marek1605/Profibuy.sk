@@ -4,6 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || ''
 
 // Generic fetch wrapper with better error handling
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  // endpoint už obsahuje /api/, tak ho nepridávame
   const url = `${API_URL}${endpoint}`
   
   console.log(`[API] Fetching: ${url}`)
@@ -24,7 +25,6 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     }
 
     const data = await res.json()
-    console.log(`[API] Success: ${endpoint}`, data ? 'has data' : 'empty')
     return data
   } catch (error) {
     console.error(`[API] Fetch error for ${endpoint}:`, error)
@@ -37,7 +37,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 export async function getProducts(params?: URLSearchParams): Promise<PaginatedResponse<Product>> {
   const query = params ? `?${params.toString()}` : ''
   try {
-    return await fetchAPI<PaginatedResponse<Product>>(`/api/products${query}`)
+    return await fetchAPI<PaginatedResponse<Product>>(`/products${query}`)
   } catch (error) {
     console.error('getProducts failed:', error)
     return { items: [], total: 0, page: 1, limit: 20, total_pages: 0 }
@@ -45,17 +45,17 @@ export async function getProducts(params?: URLSearchParams): Promise<PaginatedRe
 }
 
 export async function getProduct(id: string): Promise<Product> {
-  return fetchAPI<Product>(`/api/products/${id}`)
+  return fetchAPI<Product>(`/products/${id}`)
 }
 
 export async function getProductBySlug(slug: string): Promise<Product> {
-  return fetchAPI<Product>(`/api/products/slug/${slug}`)
+  return fetchAPI<Product>(`/products/slug/${slug}`)
 }
 
 export async function searchProducts(query: string, params?: URLSearchParams): Promise<PaginatedResponse<Product>> {
   const searchParams = params || new URLSearchParams()
   searchParams.set('q', query)
-  return fetchAPI<PaginatedResponse<Product>>(`/api/products/search?${searchParams.toString()}`)
+  return fetchAPI<PaginatedResponse<Product>>(`/products/search?${searchParams.toString()}`)
 }
 
 // ==================== CATEGORIES ====================
@@ -69,20 +69,30 @@ export async function getCategories(): Promise<Category[]> {
   }
 }
 
+export async function getCategoriesTree(): Promise<Category[]> {
+  try {
+    const res = await fetchAPI<{ success: boolean; data: Category[] }>('/categories/tree')
+    return res?.data || []
+  } catch (error) {
+    // Fallback to regular categories
+    return getCategories()
+  }
+}
+
 export async function getCategory(slug: string): Promise<Category> {
-  return fetchAPI<Category>(`/api/categories/${slug}`)
+  return fetchAPI<Category>(`/categories/${slug}`)
 }
 
 export async function getCategoryProducts(slug: string, params?: URLSearchParams): Promise<{ category: Category; products: PaginatedResponse<Product> }> {
   const query = params ? `?${params.toString()}` : ''
-  return fetchAPI(`/api/categories/${slug}/products${query}`)
+  return fetchAPI(`/categories/${slug}/products${query}`)
 }
 
 // ==================== OFFERS ====================
 
 export async function getProductOffers(productId: string): Promise<Offer[]> {
   try {
-    const data = await fetchAPI<{ offers: Offer[] }>(`/api/products/${productId}/offers`)
+    const data = await fetchAPI<{ offers: Offer[] }>(`/products/${productId}/offers`)
     return data?.offers || []
   } catch {
     return []
@@ -93,7 +103,7 @@ export async function getProductOffers(productId: string): Promise<Offer[]> {
 
 export async function getFilters(categorySlug?: string): Promise<FilterOptions> {
   if (categorySlug) {
-    return fetchAPI<FilterOptions>(`/api/filters/${categorySlug}`)
+    return fetchAPI<FilterOptions>(`/filters/${categorySlug}`)
   }
   return fetchAPI<FilterOptions>('/filters')
 }
@@ -105,7 +115,6 @@ export async function getShippingMethods(): Promise<ShippingMethod[]> {
 }
 
 export async function getPaymentMethods(): Promise<PaymentMethod[]> {
-  // This endpoint might need to be added
   return [
     { id: '1', code: 'card', name: 'Platba kartou', description: 'Platba cez Comgate', fee: 0, is_active: true },
     { id: '2', code: 'transfer', name: 'Bankový prevod', description: 'Platba vopred na účet', fee: 0, is_active: true },
@@ -116,11 +125,11 @@ export async function getPaymentMethods(): Promise<PaymentMethod[]> {
 // ==================== ORDERS ====================
 
 export async function getOrder(id: string): Promise<Order> {
-  return fetchAPI<Order>(`/api/orders/${id}`)
+  return fetchAPI<Order>(`/orders/${id}`)
 }
 
 export async function trackOrder(orderNumber: string): Promise<Order> {
-  return fetchAPI<Order>(`/api/orders/track/${orderNumber}`)
+  return fetchAPI<Order>(`/orders/track/${orderNumber}`)
 }
 
 // ==================== ADMIN ====================
@@ -133,7 +142,7 @@ export async function getDashboard(token: string): Promise<DashboardStats> {
 
 export async function getAdminProducts(token: string, params?: URLSearchParams): Promise<PaginatedResponse<Product>> {
   const query = params ? `?${params.toString()}` : ''
-  return fetchAPI<PaginatedResponse<Product>>(`/api/admin/products${query}`, {
+  return fetchAPI<PaginatedResponse<Product>>(`/admin/products${query}`, {
     headers: { Authorization: `Bearer ${token}` }
   })
 }
@@ -147,7 +156,7 @@ export async function createProduct(token: string, product: Partial<Product>): P
 }
 
 export async function updateProduct(token: string, id: string, product: Partial<Product>): Promise<Product> {
-  return fetchAPI<Product>(`/api/admin/products/${id}`, {
+  return fetchAPI<Product>(`/admin/products/${id}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(product)
@@ -155,7 +164,7 @@ export async function updateProduct(token: string, id: string, product: Partial<
 }
 
 export async function deleteProduct(token: string, id: string): Promise<void> {
-  await fetchAPI(`/api/admin/products/${id}`, {
+  await fetchAPI(`/admin/products/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` }
   })
@@ -163,13 +172,13 @@ export async function deleteProduct(token: string, id: string): Promise<void> {
 
 export async function getAdminOrders(token: string, params?: URLSearchParams): Promise<PaginatedResponse<Order>> {
   const query = params ? `?${params.toString()}` : ''
-  return fetchAPI<PaginatedResponse<Order>>(`/api/admin/orders${query}`, {
+  return fetchAPI<PaginatedResponse<Order>>(`/admin/orders${query}`, {
     headers: { Authorization: `Bearer ${token}` }
   })
 }
 
 export async function updateOrderStatus(token: string, orderId: string, status: string, trackingNumber?: string): Promise<Order> {
-  return fetchAPI<Order>(`/api/admin/orders/${orderId}/status`, {
+  return fetchAPI<Order>(`/admin/orders/${orderId}/status`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status, tracking_number: trackingNumber })
@@ -191,7 +200,7 @@ export async function createFeed(token: string, feed: Partial<Feed>): Promise<Fe
 }
 
 export async function runFeedImport(token: string, feedId: string): Promise<void> {
-  await fetchAPI(`/api/admin/feeds/${feedId}/run`, {
+  await fetchAPI(`/admin/feeds/${feedId}/run`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` }
   })

@@ -7,35 +7,15 @@ import { useCartStore, useAuthStore } from '@/lib/store'
 import { getCategories } from '@/lib/api'
 import type { Category } from '@/types'
 
-const categoryIcons: Record<string, string> = {
-  'automobilove-produkty': 'M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.7-2.8C12.1 6.1 10.8 6 9.4 6H5.2C3.9 6 2.7 6.7 2 7.8L1 10v6c0 .6.4 1 1 1h1',
-  'cestovanie': 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3C9.2 3 7 5.2 7 8s5 8 5 8 5-5 5-8-2.2-5-5-5z',
-  'dom-a-zahrada': 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
-  'domace-spotrebice': 'M5 2h14a1 1 0 011 1v18a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z M12 18a2 2 0 100-4 2 2 0 000 4z M8 6h8 M8 9h8',
-  'elektronika': 'M12 18h.01 M8 21h8 M7 21a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7z',
-  'kancelaria': 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
-  'ostatne': 'M4 6h16M4 12h16M4 18h16',
-  'pre-deti': 'M12 2a10 10 0 100 20 10 10 0 000-20zM8 14s1.5 2 4 2 4-2 4-2 M9 9h.01 M15 9h.01',
-}
-
-function CategoryIcon({ slug, className = '' }: { slug: string; className?: string }) {
-  const path = categoryIcons[slug]
-  if (!path) return <div className={`w-8 h-8 bg-gray-200 rounded-lg ${className}`} />
-  return (
-    <svg className={`w-7 h-7 ${className}`} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-      <path d={path} />
-    </svg>
-  )
-}
-
 export default function Header() {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [mobileMenu, setMobileMenu] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [scrolled, setScrolled] = useState(false)
-  const menuTimeout = useRef<NodeJS.Timeout | null>(null)
+  const [megaMenuOpen, setMegaMenuOpen] = useState(false)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const closeTimeout = useRef<NodeJS.Timeout | null>(null)
   const getItemCount = useCartStore(s => s.getItemCount)
   const getTotal = useCartStore(s => s.getTotal)
   const user = useAuthStore(s => s.user)
@@ -43,11 +23,20 @@ export default function Header() {
 
   useEffect(() => {
     async function load() {
-      try { const cats = await getCategories(); setCategories(cats || []) } catch {}
+      try {
+        const cats = await getCategories()
+        setCategories(cats || [])
+      } catch (e) {
+        console.error('Failed to load categories:', e)
+      }
     }
     load()
-    const handleScroll = () => setScrolled(window.scrollY > 10)
-    window.addEventListener('scroll', handleScroll)
+
+    // Scroll handler for collapsed state
+    const handleScroll = () => {
+      setIsCollapsed(window.scrollY > 150)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
@@ -56,21 +45,41 @@ export default function Header() {
     if (search.trim()) router.push(`/search?q=${encodeURIComponent(search.trim())}`)
   }
 
-  function enterCategory(slug: string) {
-    if (menuTimeout.current) clearTimeout(menuTimeout.current)
-    setActiveCategory(slug)
+  function openMegaMenu(cat: Category) {
+    if (closeTimeout.current) {
+      clearTimeout(closeTimeout.current)
+      closeTimeout.current = null
+    }
+    if (cat.children && cat.children.length > 0) {
+      setActiveCategoryId(cat.id)
+      setMegaMenuOpen(true)
+    }
   }
 
-  function leaveCategory() {
-    menuTimeout.current = setTimeout(() => setActiveCategory(null), 200)
+  function scheduleMegaClose() {
+    closeTimeout.current = setTimeout(() => {
+      setMegaMenuOpen(false)
+      setActiveCategoryId(null)
+    }, 150)
   }
 
-  const activeCat = categories.find(c => c.slug === activeCategory)
+  function cancelMegaClose() {
+    if (closeTimeout.current) {
+      clearTimeout(closeTimeout.current)
+      closeTimeout.current = null
+    }
+  }
+
+  function getInitial(name: string) {
+    return (name || 'K').charAt(0).toUpperCase()
+  }
+
+  const activeCategory = categories.find(c => c.id === activeCategoryId)
 
   return (
-    <header className={`sticky top-0 z-50 bg-white transition-shadow duration-300 ${scrolled ? 'header-shadow' : ''}`}>
-      {/* Top announcement bar */}
-      <div style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)' }} className="text-white text-sm">
+    <header className="sticky top-0 z-50 bg-white">
+      {/* Top bar */}
+      <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d5a87] text-white text-sm">
         <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-1.5">
@@ -81,54 +90,50 @@ export default function Header() {
           <div className="hidden sm:flex items-center gap-5 text-white/80">
             <Link href="/contact" className="hover:text-white transition">Kontakt</Link>
             <span className="text-white/30">|</span>
-            <Link href="/order-tracking" className="hover:text-white transition">Sledovat zasielku</Link>
+            <Link href="/order-tracking" className="hover:text-white transition">Sledovať zásielku</Link>
           </div>
         </div>
       </div>
 
       {/* Main header */}
-      <div className="border-b">
+      <div className="border-b bg-white">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
           {/* Mobile menu toggle */}
-          <button onClick={() => setMobileMenu(!mobileMenu)} className="lg:hidden p-1">
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-1">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
 
           {/* Logo */}
           <Link href="/" className="flex-shrink-0 flex items-center gap-1">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm" style={{ background: 'var(--primary)' }}>P</div>
-            <span className="text-xl font-extrabold" style={{ color: 'var(--primary)' }}>PROFI</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm bg-[#1e3a5f]">P</div>
+            <span className="text-xl font-extrabold text-[#1e3a5f]">PROFI</span>
             <span className="text-xl font-extrabold text-gray-900">BUY</span>
             <span className="text-xs text-gray-400 ml-0.5">.sk</span>
           </Link>
 
           {/* Search */}
           <form onSubmit={handleSearch} className="flex-1 max-w-xl hidden md:flex">
-            <div className="flex w-full rounded-xl overflow-hidden border-2 border-gray-200 focus-within:border-blue-400 transition">
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hladat produkty..." className="flex-1 px-4 py-2.5 focus:outline-none text-sm" />
-              <button type="submit" className="px-5 text-white" style={{ background: 'var(--primary)' }}>
+            <div className="flex w-full rounded-xl overflow-hidden border-2 border-gray-200 focus-within:border-[#c4956a] transition">
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hľadať produkt, značku..." className="flex-1 px-4 py-2.5 focus:outline-none text-sm" />
+              <button type="submit" className="px-5 text-white bg-[#1e3a5f] hover:bg-[#2d5a87] transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </button>
             </div>
           </form>
 
           {/* Right actions */}
-          <div className="flex items-center gap-5 ml-auto">
-            {/* Wishlist */}
-            <button className="hidden md:flex flex-col items-center text-gray-500 hover:text-red-500 transition">
+          <div className="flex items-center gap-4 ml-auto">
+            <button className="hidden md:flex flex-col items-center text-gray-500 hover:text-red-500 transition p-2">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
             </button>
-
-            {/* Account */}
+            
             {user ? (
-              <Link href="/account" className="hidden md:flex flex-col items-center text-gray-500 hover:text-gray-800 transition">
+              <Link href="/account" className="hidden md:flex flex-col items-center text-gray-500 hover:text-gray-800 transition p-2">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                <span className="text-xs mt-0.5">{user.first_name}</span>
               </Link>
             ) : (
-              <Link href="/login" className="hidden md:flex flex-col items-center text-gray-500 hover:text-gray-800 transition">
+              <Link href="/login" className="hidden md:flex flex-col items-center text-gray-500 hover:text-gray-800 transition p-2">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                <span className="text-xs mt-0.5">Prihlasit</span>
               </Link>
             )}
 
@@ -137,7 +142,7 @@ export default function Header() {
               <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" /></svg>
               {cartCount > 0 && (
                 <>
-                  <span className="text-sm font-bold">{getTotal().toFixed(2)} &euro;</span>
+                  <span className="text-sm font-bold">{getTotal().toFixed(2)} €</span>
                   <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{cartCount}</span>
                 </>
               )}
@@ -146,44 +151,83 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Category navigation bar */}
-      <div className="border-b bg-white hidden lg:block relative">
+      {/* Category navigation - MEGA MENU like profibuy.sk */}
+      <nav className={`border-b bg-white hidden lg:block relative ${isCollapsed ? 'shadow-md' : ''}`}>
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center gap-0">
-            {categories.slice(0, 8).map(cat => (
-              <div key={cat.id} className="relative" onMouseEnter={() => enterCategory(cat.slug)} onMouseLeave={leaveCategory}>
-                <Link href={`/categories/${cat.slug}`} className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition whitespace-nowrap ${activeCategory === cat.slug ? 'text-blue-700 bg-blue-50' : 'text-gray-700 hover:text-blue-700 hover:bg-gray-50'}`}>
-                  <CategoryIcon slug={cat.slug} className="text-gray-500" />
-                  <span>{cat.name}</span>
-                </Link>
-              </div>
+          <div className="flex items-center overflow-x-auto no-scrollbar">
+            {categories.slice(0, 10).map(cat => (
+              <Link
+                key={cat.id}
+                href={`/categories/${cat.slug}`}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap transition-all border-b-2 -mb-[1px] ${
+                  activeCategoryId === cat.id 
+                    ? 'text-[#c4956a] border-[#c4956a] bg-orange-50/50' 
+                    : 'text-gray-700 border-transparent hover:text-[#c4956a] hover:bg-orange-50/30'
+                }`}
+                onMouseEnter={() => openMegaMenu(cat)}
+                onMouseLeave={scheduleMegaClose}
+              >
+                <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                  {cat.image ? (
+                    <img src={cat.image} alt="" className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="text-base">{getInitial(cat.name)}</span>
+                  )}
+                </span>
+                <span>{cat.name}</span>
+              </Link>
             ))}
-            {categories.length > 8 && (
-              <button className="flex items-center gap-1 px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-800">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-              </button>
-            )}
           </div>
         </div>
 
         {/* Mega Menu Dropdown */}
-        {activeCategory && activeCat && activeCat.children && activeCat.children.length > 0 && (
-          <div className="absolute top-full left-0 right-0 bg-white border-t shadow-2xl z-50" onMouseEnter={() => enterCategory(activeCategory)} onMouseLeave={leaveCategory}>
-            <div className="max-w-7xl mx-auto px-4 py-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {activeCat.children.map(sub => (
-                  <div key={sub.id}>
-                    <Link href={`/categories/${sub.slug}`} className="flex items-center gap-3 mb-2 group">
-                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-50 transition">
-                        <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h10v10H7z" /></svg>
+        {megaMenuOpen && activeCategory && activeCategory.children && activeCategory.children.length > 0 && (
+          <div 
+            className="absolute left-0 right-0 top-full bg-white border-t shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+            onMouseEnter={cancelMegaClose}
+            onMouseLeave={scheduleMegaClose}
+          >
+            <div className="max-w-7xl mx-auto px-6 py-5">
+              <div className="grid grid-cols-4 gap-x-6 gap-y-4 max-h-[50vh] overflow-y-auto">
+                {activeCategory.children.map(subcat => (
+                  <div key={subcat.id} className="py-2 border-b border-gray-100 last:border-0">
+                    {/* Subcategory header with image */}
+                    <Link 
+                      href={`/categories/${subcat.slug}`}
+                      className="flex items-center gap-3 mb-2 group"
+                    >
+                      <div className="w-11 h-11 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {subcat.image ? (
+                          <img src={subcat.image} alt="" className="w-full h-full object-contain" />
+                        ) : (
+                          <span className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-sm font-semibold text-gray-400">
+                            {getInitial(subcat.name)}
+                          </span>
+                        )}
                       </div>
-                      <span className="font-semibold text-sm text-gray-900 group-hover:text-blue-700">{sub.name}</span>
+                      <span className="text-sm font-bold text-gray-900 group-hover:text-[#c4956a] transition">
+                        {subcat.name}
+                      </span>
                     </Link>
-                    {sub.children && sub.children.length > 0 && (
-                      <div className="ml-13 space-y-1 pl-[52px]">
-                        {sub.children.slice(0, 5).map(child => (
-                          <Link key={child.id} href={`/categories/${child.slug}`} className="block text-xs text-gray-500 hover:text-blue-600 transition py-0.5">{child.name}</Link>
+                    
+                    {/* Grandchildren - inline links with bullets */}
+                    {subcat.children && subcat.children.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-0 pl-0 text-xs leading-relaxed">
+                        {subcat.children.slice(0, 8).map((grandchild, i) => (
+                          <Link
+                            key={grandchild.id}
+                            href={`/categories/${grandchild.slug}`}
+                            className="text-gray-500 hover:text-[#c4956a] transition whitespace-nowrap"
+                          >
+                            {i > 0 && <span className="text-gray-300 mx-1">•</span>}
+                            {grandchild.name}
+                          </Link>
                         ))}
+                        {subcat.children.length > 8 && (
+                          <Link href={`/categories/${subcat.slug}`} className="text-[#c4956a] font-medium ml-1">
+                            +{subcat.children.length - 8}
+                          </Link>
+                        )}
                       </div>
                     )}
                   </div>
@@ -192,31 +236,52 @@ export default function Header() {
             </div>
           </div>
         )}
-      </div>
+      </nav>
 
       {/* Mobile search */}
-      <div className="md:hidden px-4 py-2 border-b">
+      <div className="md:hidden px-4 py-2 border-b bg-white">
         <form onSubmit={handleSearch} className="flex rounded-lg overflow-hidden border">
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hladat..." className="flex-1 px-3 py-2 text-sm focus:outline-none" />
-          <button type="submit" className="px-4 text-white" style={{ background: 'var(--primary)' }}>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hľadať..." className="flex-1 px-3 py-2 text-sm focus:outline-none" />
+          <button type="submit" className="px-4 text-white bg-[#1e3a5f]">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </button>
         </form>
       </div>
 
       {/* Mobile menu */}
-      {mobileMenu && (
-        <div className="lg:hidden bg-white border-t shadow-lg">
-          {categories.slice(0, 10).map(cat => (
-            <Link key={cat.id} href={`/categories/${cat.slug}`} className="flex items-center gap-3 px-4 py-3 border-b hover:bg-gray-50" onClick={() => setMobileMenu(false)}>
-              <CategoryIcon slug={cat.slug} className="text-gray-400" />
-              <span className="text-sm font-medium">{cat.name}</span>
-              {cat.product_count > 0 && <span className="text-xs text-gray-400 ml-auto">{cat.product_count}</span>}
-            </Link>
-          ))}
-          <Link href="/products" className="block px-4 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50" onClick={() => setMobileMenu(false)}>Vsetky produkty</Link>
-          <Link href="/account" className="block px-4 py-3 text-sm text-gray-600 hover:bg-gray-50" onClick={() => setMobileMenu(false)}>Moj ucet</Link>
-        </div>
+      {mobileMenuOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setMobileMenuOpen(false)} />
+          <div className="fixed top-0 left-0 bottom-0 w-[300px] max-w-[85vw] bg-white z-50 shadow-2xl animate-in slide-in-from-left duration-300">
+            <div className="flex items-center justify-between px-4 py-4 bg-gradient-to-r from-[#1e3a5f] to-[#2d5a87] text-white">
+              <span className="text-lg font-bold">Menu</span>
+              <button onClick={() => setMobileMenuOpen(false)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto h-[calc(100%-60px)]">
+              {categories.map(cat => (
+                <Link
+                  key={cat.id}
+                  href={`/categories/${cat.slug}`}
+                  className="flex items-center gap-3 px-4 py-3 border-b hover:bg-gray-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <span className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-sm">
+                    {getInitial(cat.name)}
+                  </span>
+                  <span className="font-medium text-gray-800">{cat.name}</span>
+                  {(cat.product_count || 0) > 0 && (
+                    <span className="text-xs text-gray-400 ml-auto">{cat.product_count}</span>
+                  )}
+                </Link>
+              ))}
+              <Link href="/products" className="block px-4 py-3 text-[#c4956a] font-semibold" onClick={() => setMobileMenuOpen(false)}>
+                Všetky produkty →
+              </Link>
+            </div>
+          </div>
+        </>
       )}
     </header>
   )

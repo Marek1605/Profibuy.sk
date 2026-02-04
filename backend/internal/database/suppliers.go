@@ -1074,3 +1074,30 @@ func (p *Postgres) DeleteSupplierBrands(ctx context.Context, supplierID uuid.UUI
 	_, err := p.pool.Exec(ctx, `DELETE FROM supplier_brands WHERE supplier_id = $1`, supplierID)
 	return err
 }
+
+// GetUniqueProductCategories extracts unique category trees from products
+func (p *Postgres) GetUniqueProductCategories(ctx context.Context, supplierID uuid.UUID) error {
+	query := `
+		INSERT INTO supplier_categories (id, supplier_id, external_id, name, full_path, created_at, updated_at)
+		SELECT 
+			gen_random_uuid(),
+			$1,
+			COALESCE(sp.attributes->>'categoryId', sp.external_id),
+			COALESCE(sp.attributes->>'subCategoryTree', sp.attributes->>'categoryTree', sp.attributes->>'mainCategoryTree', 'Unknown'),
+			CONCAT_WS(' > ', 
+				NULLIF(sp.attributes->>'mainCategoryTree', ''),
+				NULLIF(sp.attributes->>'categoryTree', ''),
+				NULLIF(sp.attributes->>'subCategoryTree', '')
+			),
+			NOW(), NOW()
+		FROM supplier_products sp
+		WHERE sp.supplier_id = $1
+		GROUP BY sp.attributes->>'categoryId', sp.attributes->>'mainCategoryTree', sp.attributes->>'categoryTree', sp.attributes->>'subCategoryTree', sp.external_id
+		ON CONFLICT (supplier_id, external_id) DO UPDATE SET
+			name = EXCLUDED.name,
+			full_path = EXCLUDED.full_path,
+			updated_at = NOW()
+	`
+	_, err := p.pool.Exec(ctx, query, supplierID)
+	return err
+}

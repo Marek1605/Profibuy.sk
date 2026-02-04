@@ -390,24 +390,6 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 
 	return nil
 }
-
-// ==================== CATEGORIES ====================
-
-
-
-
-
-
-
-
-
-
-
-
-	}
-	defer rows.Close()
-
-	var categories []models.Category
 	for rows.Next() {
 		var cat models.Category
 		err := rows.Scan(

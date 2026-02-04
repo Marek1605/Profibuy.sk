@@ -62,7 +62,7 @@ export async function searchProducts(query: string, params?: URLSearchParams): P
 
 export async function getCategories(): Promise<Category[]> {
   try {
-    return await fetchAPI<Category[]>('/api/categories')
+    return await fetchAPI<Category[]>('/categories')
   } catch (error) {
     console.error('getCategories failed:', error)
     return []
@@ -95,13 +95,13 @@ export async function getFilters(categorySlug?: string): Promise<FilterOptions> 
   if (categorySlug) {
     return fetchAPI<FilterOptions>(`/api/filters/${categorySlug}`)
   }
-  return fetchAPI<FilterOptions>('/api/filters')
+  return fetchAPI<FilterOptions>('/filters')
 }
 
 // ==================== SHIPPING & PAYMENT ====================
 
 export async function getShippingMethods(): Promise<ShippingMethod[]> {
-  return fetchAPI<ShippingMethod[]>('/api/shipping/methods')
+  return fetchAPI<ShippingMethod[]>('/shipping/methods')
 }
 
 export async function getPaymentMethods(): Promise<PaymentMethod[]> {
@@ -126,7 +126,7 @@ export async function trackOrder(orderNumber: string): Promise<Order> {
 // ==================== ADMIN ====================
 
 export async function getDashboard(token: string): Promise<DashboardStats> {
-  return fetchAPI<DashboardStats>('/api/admin/dashboard', {
+  return fetchAPI<DashboardStats>('/admin/dashboard', {
     headers: { Authorization: `Bearer ${token}` }
   })
 }
@@ -139,7 +139,7 @@ export async function getAdminProducts(token: string, params?: URLSearchParams):
 }
 
 export async function createProduct(token: string, product: Partial<Product>): Promise<Product> {
-  return fetchAPI<Product>('/api/admin/products', {
+  return fetchAPI<Product>('/admin/products', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(product)
@@ -177,13 +177,13 @@ export async function updateOrderStatus(token: string, orderId: string, status: 
 }
 
 export async function getFeeds(token: string): Promise<Feed[]> {
-  return fetchAPI<Feed[]>('/api/admin/feeds', {
+  return fetchAPI<Feed[]>('/admin/feeds', {
     headers: { Authorization: `Bearer ${token}` }
   })
 }
 
 export async function createFeed(token: string, feed: Partial<Feed>): Promise<Feed> {
-  return fetchAPI<Feed>('/api/admin/feeds', {
+  return fetchAPI<Feed>('/admin/feeds', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(feed)
@@ -198,7 +198,7 @@ export async function runFeedImport(token: string, feedId: string): Promise<void
 }
 
 export async function clearCache(token: string): Promise<void> {
-  await fetchAPI('/api/admin/cache/clear', {
+  await fetchAPI('/admin/cache/clear', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` }
   })

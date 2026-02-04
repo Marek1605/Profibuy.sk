@@ -177,7 +177,6 @@ func main() {
 			
 			// Supplier categories and brands
 			admin.GET("/suppliers/:id/categories", handlers.ListSupplierCategories(db))
-                admin.DELETE("/suppliers/:id/categories/all", handlers.DeleteAllSupplierCategories(db))
 			admin.GET("/suppliers/:id/brands", handlers.ListSupplierBrands(db))
 			
 			// Link supplier products to main catalog

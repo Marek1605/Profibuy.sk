@@ -291,3 +291,24 @@ export interface Feed {
   product_count: number
   created_at: string
 }
+
+// Offer (from vendors/suppliers)
+export interface Offer {
+  id: string
+  product_id: string
+  shop_id?: string
+  shop_name: string
+  shop_logo?: string
+  shop_url?: string
+  price: number
+  original_price?: number
+  stock_status: 'instock' | 'outofstock' | 'preorder'
+  delivery: string
+  shipping: number
+  rating?: number
+  review_count?: number
+  affiliate_url?: string
+  display_mode?: 'free' | 'cpc' | 'master'
+  is_master?: boolean
+  initials?: string
+}

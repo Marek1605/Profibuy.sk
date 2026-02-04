@@ -29,26 +29,94 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      try { const cats = await getCategories(); setCategories(cats || []) } catch {}
+      setLoading(true)
+      setError(null)
+      
       try {
+        // Load categories
+        const cats = await getCategories()
+        console.log('Categories loaded:', cats?.length || 0)
+        setCategories(cats || [])
+      } catch (e) {
+        console.error('Failed to load categories:', e)
+      }
+
+      try {
+        // Load featured products
         const p = new URLSearchParams({ limit: '8', sort: 'bestselling' })
         const data = await getProducts(p)
-        setFeaturedProducts(data.items || [])
-      } catch {}
+        console.log('Featured products loaded:', data?.items?.length || 0)
+        setFeaturedProducts(data?.items || [])
+      } catch (e) {
+        console.error('Failed to load featured products:', e)
+      }
+
       try {
+        // Load sale products
         const p = new URLSearchParams({ limit: '4', sort: 'newest', on_sale: 'true' })
         const data = await getProducts(p)
-        setSaleProducts(data.items || [])
-      } catch {}
+        console.log('Sale products loaded:', data?.items?.length || 0)
+        setSaleProducts(data?.items || [])
+      } catch (e) {
+        console.error('Failed to load sale products:', e)
+      }
+
       setLoading(false)
     }
     load()
   }, [])
 
   const activeCat = categories.find(c => c.slug === activeCategory)
+
+  // Loading skeleton
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="bg-white min-h-screen">
+          {/* Hero skeleton */}
+          <div className="h-[400px] bg-gradient-to-r from-gray-200 to-gray-300 animate-pulse" />
+          
+          {/* Stats skeleton */}
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="flex items-center gap-4 p-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-200 animate-pulse" />
+                  <div className="flex-1">
+                    <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
+                    <div className="h-3 w-16 bg-gray-100 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Products skeleton */}
+          <div className="max-w-7xl mx-auto px-4 py-12">
+            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-8" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                <div key={i} className="bg-white rounded-2xl border overflow-hidden">
+                  <div className="aspect-square bg-gray-100 animate-pulse" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-4 w-2/3 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-6 w-1/2 bg-gray-100 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    )
+  }
 
   return (
     <>
@@ -147,7 +215,7 @@ export default function HomePage() {
         </section>
 
         {/* === FEATURED PRODUCTS === */}
-        {featuredProducts.length > 0 && (
+        {featuredProducts.length > 0 ? (
           <section className="py-12 md:py-16">
             <div className="max-w-7xl mx-auto px-4">
               <div className="flex items-center justify-between mb-8">
@@ -160,6 +228,15 @@ export default function HomePage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
                 {featuredProducts.map(p => <ProductCard key={p.id} product={p} />)}
               </div>
+            </div>
+          </section>
+        ) : (
+          <section className="py-12 md:py-16">
+            <div className="max-w-7xl mx-auto px-4 text-center">
+              <div className="text-6xl mb-4">📦</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Pripravujeme produkty</h2>
+              <p className="text-gray-500 mb-6">Čoskoro tu nájdete široký výber produktov za skvelé ceny.</p>
+              <Link href="/admin" className="text-sm text-blue-600 hover:underline">Prejsť do administrácie →</Link>
             </div>
           </section>
         )}
@@ -183,7 +260,7 @@ export default function HomePage() {
         )}
 
         {/* === CATEGORIES GRID === */}
-        {categories.length > 0 && (
+        {categories.length > 0 ? (
           <section className="py-12 md:py-16">
             <div className="max-w-7xl mx-auto px-4">
               <div className="flex items-center justify-between mb-8">
@@ -197,7 +274,7 @@ export default function HomePage() {
                       <span className="text-4xl">{categoryEmojis[cat.slug] || '📦'}</span>
                       <div>
                         <h3 className="font-bold text-gray-900 group-hover:text-blue-700 transition">{cat.name}</h3>
-                        <span className="text-xs text-gray-400">{cat.product_count} produktov</span>
+                        <span className="text-xs text-gray-400">{cat.product_count || 0} produktov</span>
                       </div>
                     </div>
                     {cat.children && cat.children.length > 0 && (
@@ -211,6 +288,14 @@ export default function HomePage() {
                   </Link>
                 ))}
               </div>
+            </div>
+          </section>
+        ) : (
+          <section className="py-12 md:py-16">
+            <div className="max-w-7xl mx-auto px-4 text-center">
+              <div className="text-6xl mb-4">📂</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Kategórie sa načítavajú</h2>
+              <p className="text-gray-500">Skontrolujte pripojenie k serveru alebo vytvorte kategórie v administrácii.</p>
             </div>
           </section>
         )}

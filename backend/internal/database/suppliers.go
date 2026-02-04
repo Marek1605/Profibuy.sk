@@ -901,103 +901,47 @@ func (p *Postgres) GetUnlinkedSupplierProducts(ctx context.Context, supplierID u
 		
 		products = append(products, &sp)
 	}
-}
 	
-// GetOrCreateCategoryByPath finds or creates category hierarchy (main -> sub -> subsub)
-// Returns the deepest category in the hierarchy
-func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, subsub string) (*models.Category, error) {
-	if main == "" {
-		return nil, nil
-	}
-
-	var parentID *uuid.UUID
-	var lastCat *models.Category
-
-	// Create main category (no parent)
-	mainCat, err := p.getOrCreateCategoryWithParent(ctx, main, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create main category: %w", err)
-	}
-	lastCat = mainCat
-	parentID = &mainCat.ID
-
-	// Create sub category if provided
-	if sub != "" && sub != main {
-		subCat, err := p.getOrCreateCategoryWithParent(ctx, sub, parentID)
-		if err != nil {
-			return nil, fmt.Errorf("create sub category: %w", err)
-		}
-		lastCat = subCat
-		parentID = &subCat.ID
-	}
-
-	// Create subsub category if provided
-	if subsub != "" && subsub != sub {
-		// Clean subsub - remove prefix like "Monitors - "
-		cleanSubsub := subsub
-		if idx := strings.Index(subsub, " - "); idx > 0 {
-			cleanSubsub = strings.TrimSpace(subsub[idx+3:])
-		}
-		if cleanSubsub != "" && cleanSubsub != sub {
-			subsubCat, err := p.getOrCreateCategoryWithParent(ctx, cleanSubsub, parentID)
-			if err != nil {
-				return nil, fmt.Errorf("create subsub category: %w", err)
-			}
-			lastCat = subsubCat
-		}
-	}
-
-	return lastCat, nil
+	return products, nil
 }
 
-// getOrCreateCategoryWithParent finds or creates a category with specific parent
-func (p *Postgres) getOrCreateCategoryWithParent(ctx context.Context, name string, parentID *uuid.UUID) (*models.Category, error) {
-	if name == "" {
+// GetOrCreateCategoryByPath finds or creates category hierarchy
+func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, subsub string) (*models.Category, error) {
+	// Use the most specific category available
+	categoryName := main
+	if sub != "" {
+		categoryName = sub
+	}
+	if subsub != "" {
+		categoryName = subsub
+	}
+	
+	if categoryName == "" {
 		return nil, nil
 	}
-
-	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	slug = strings.ReplaceAll(slug, "/", "-")
-	slug = strings.ReplaceAll(slug, "&", "and")
-
+	
+	// Check if exists
 	var cat models.Category
-
-	// Check if exists with same name and parent
-	var query string
-	var args []interface{}
-
-	if parentID == nil {
-		query = `SELECT id, parent_id, name, slug FROM categories WHERE name = $1 AND parent_id IS NULL`
-		args = []interface{}{name}
-	} else {
-		query = `SELECT id, parent_id, name, slug FROM categories WHERE name = $1 AND parent_id = $2`
-		args = []interface{}{name, *parentID}
-	}
-
-	err := p.pool.QueryRow(ctx, query, args...).Scan(&cat.ID, &cat.ParentID, &cat.Name, &cat.Slug)
+	err := p.pool.QueryRow(ctx, `SELECT id, name, slug FROM categories WHERE name = $1`, categoryName).Scan(&cat.ID, &cat.Name, &cat.Slug)
 	if err == nil {
 		return &cat, nil
 	}
-
+	
 	// Create new category
 	cat.ID = uuid.New()
-	cat.Name = name
-	cat.Slug = slug
-	cat.ParentID = parentID
-
+	cat.Name = categoryName
+	cat.Slug = strings.ToLower(strings.ReplaceAll(categoryName, " ", "-"))
+	
 	_, err = p.pool.Exec(ctx, `
-		INSERT INTO categories (id, parent_id, name, slug, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		ON CONFLICT (slug) DO UPDATE SET parent_id = COALESCE(EXCLUDED.parent_id, categories.parent_id)
-		RETURNING id
-	`, cat.ID, cat.ParentID, cat.Name, cat.Slug)
-
+		INSERT INTO categories (id, name, slug, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (slug) DO NOTHING
+	`, cat.ID, cat.Name, cat.Slug)
+	
 	if err != nil {
-		// Slug conflict - try to get existing
-		p.pool.QueryRow(ctx, `SELECT id, parent_id, name, slug FROM categories WHERE slug = $1`, slug).Scan(&cat.ID, &cat.ParentID, &cat.Name, &cat.Slug)
+		return nil, err
 	}
-
-	return &cat, nil
+	
 	return &cat, nil
 }
 

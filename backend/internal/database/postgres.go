@@ -393,17 +393,17 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 
 // ==================== CATEGORIES ====================
 
-func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error) {
-	query := `
-		SELECT id, parent_id, slug, name, description, image, position, 
-			   meta_title, meta_description, product_count, COALESCE(path::text, ''), created_at, updated_at
-		FROM categories 
-		ORDER BY position, name
-	`
 
-	rows, err := p.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("list categories: %w", err)
+
+
+
+
+
+
+
+
+
+
 	}
 	defer rows.Close()
 
@@ -426,8 +426,8 @@ func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error
 
 func (p *Postgres) GetCategory(ctx context.Context, slug string) (*models.Category, error) {
 	query := `
-		SELECT id, parent_id, slug, name, description, image, position, 
-			   meta_title, meta_description, product_count, COALESCE(path::text, ''), created_at, updated_at
+		SELECT id, parent_id, slug, name, COALESCE(description, ''), COALESCE(image, ''), position, 
+			   COALESCE(meta_title, ''), COALESCE(meta_description, ''), COALESCE(product_count, 0), COALESCE(path::text, ''), created_at, updated_at
 		FROM categories 
 		WHERE slug = $1
 	`

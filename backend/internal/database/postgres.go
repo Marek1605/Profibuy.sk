@@ -389,22 +389,6 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 	}
 
 	return nil
-}
-	for rows.Next() {
-		var cat models.Category
-		err := rows.Scan(
-			&cat.ID, &cat.ParentID, &cat.Slug, &cat.Name, &cat.Description,
-			&cat.Image, &cat.Position, &cat.MetaTitle, &cat.MetaDesc,
-			&cat.ProductCount, &cat.Path, &cat.CreatedAt, &cat.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan category: %w", err)
-		}
-		categories = append(categories, cat)
-	}
-
-	return categories, nil
-}
 
 // ListCategories returns all categories with proper NULL handling
 func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error) {

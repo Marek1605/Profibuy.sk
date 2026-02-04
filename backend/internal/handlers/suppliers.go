@@ -1427,8 +1427,7 @@ func ListSupplierCategories(db *database.Postgres) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data":    tree,
-			"flat":    categories,
+			"data": gin.H{"tree": tree, "categories": categories},
 		})
 	}
 }

@@ -424,6 +424,39 @@ func (p *Postgres) BulkUpsertProducts(ctx context.Context, products []models.Pro
 	return categories, nil
 }
 
+// ListCategories returns all categories with proper NULL handling
+func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error) {
+	query := `
+		SELECT id, parent_id, slug, name, 
+			   COALESCE(description, ''), COALESCE(image, ''), COALESCE(position, 0),
+			   COALESCE(meta_title, ''), COALESCE(meta_description, ''), 
+			   COALESCE(product_count, 0), COALESCE(path::text, ''), 
+			   COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
+		FROM categories
+		ORDER BY position, name
+	`
+	rows, err := p.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	defer rows.Close()
+
+	var categories []models.Category
+	for rows.Next() {
+		var cat models.Category
+		err := rows.Scan(
+			&cat.ID, &cat.ParentID, &cat.Slug, &cat.Name, &cat.Description,
+			&cat.Image, &cat.Position, &cat.MetaTitle, &cat.MetaDesc,
+			&cat.ProductCount, &cat.Path, &cat.CreatedAt, &cat.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		categories = append(categories, cat)
+	}
+	return categories, nil
+}
+
 func (p *Postgres) GetCategory(ctx context.Context, slug string) (*models.Category, error) {
 	query := `
 		SELECT id, parent_id, slug, name, COALESCE(description, ''), COALESCE(image, ''), position, 

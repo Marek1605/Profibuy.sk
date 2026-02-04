@@ -177,7 +177,12 @@ func main() {
 			
 			// Supplier categories and brands
 			admin.GET("/suppliers/:id/categories", handlers.ListSupplierCategories(db))
+			admin.DELETE("/suppliers/:id/categories", handlers.DeleteAllSupplierCategories(db))
+			admin.POST("/suppliers/:id/categories/regenerate", handlers.RegenerateCategoriesFromProducts(db))
 			admin.GET("/suppliers/:id/brands", handlers.ListSupplierBrands(db))
+			
+			// Main categories management
+			admin.DELETE("/categories/all", handlers.DeleteAllCategories(db))
 			
 			// Link supplier products to main catalog
 			admin.POST("/suppliers/:id/link-all", handlers.LinkAllProducts(db))

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ArrowLeft, FolderTree, Folder, FolderOpen, ChevronRight, ChevronDown,
-  Package, Loader2, Search, Link as LinkIcon, Check
+  Package, Loader2, Search, Link as LinkIcon, Check, Trash2, RefreshCw
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/store';
@@ -32,6 +32,7 @@ interface SupplierCategory {
 interface CategoryTree {
   id: string;
   external_id: string;
+  parent_external_id?: string;
   name: string;
   full_path: string;
   category_id: string | null;
@@ -55,6 +56,7 @@ export default function SupplierCategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadSupplier = useCallback(async () => {
     try {
@@ -121,6 +123,58 @@ export default function SupplierCategoriesPage() {
     setExpandedIds(new Set());
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm('Naozaj chcete vymazať VŠETKY kategórie tohto dodávateľa? Táto akcia je nevratná.')) {
+      return;
+    }
+    
+    setActionLoading('delete');
+    try {
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/categories`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Vymazaných ${data.deleted} kategórií`);
+        loadCategories();
+      } else {
+        alert('Chyba: ' + data.error);
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Chyba pri mazaní');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!confirm('Chcete regenerovať kategórie z produktov? Existujúce kategórie budú vymazané a znova vytvorené.')) {
+      return;
+    }
+    
+    setActionLoading('regenerate');
+    try {
+      const res = await fetch(`${API_BASE}/admin/suppliers/${supplierId}/categories/regenerate`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Vytvorených ${data.categories} kategórií z produktov`);
+        loadCategories();
+      } else {
+        alert('Chyba: ' + data.error);
+      }
+    } catch (err) {
+      console.error('Regenerate failed:', err);
+      alert('Chyba pri regenerácii');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const filterTree = (items: CategoryTree[], searchTerm: string): CategoryTree[] => {
     if (!searchTerm) return items;
     
@@ -128,8 +182,8 @@ export default function SupplierCategoriesPage() {
     
     return items
       .map(item => {
-        const matchesSearch = item.name.toLowerCase().includes(term) ||
-                              item.full_path?.toLowerCase().includes(term);
+        const matchesSearch = (item.name || '').toLowerCase().includes(term) ||
+                              (item.full_path || '').toLowerCase().includes(term);
         const filteredChildren = filterTree(item.children || [], searchTerm);
         
         if (matchesSearch || filteredChildren.length > 0) {
@@ -149,9 +203,12 @@ export default function SupplierCategoriesPage() {
     const hasChildren = category.children && category.children.length > 0;
     const isExpanded = expandedIds.has(category.external_id);
     const isMapped = !!category.category_id;
+    
+    // Display name - use name, full_path, or external_id as fallback
+    const displayName = category.name || category.full_path?.split(' > ').pop() || category.external_id || '(bez názvu)';
 
     return (
-      <div key={category.external_id}>
+      <div key={category.external_id || category.id}>
         <div 
           className={`flex items-center gap-2 py-2 px-3 hover:bg-gray-50 rounded-lg cursor-pointer group`}
           style={{ paddingLeft: `${depth * 24 + 12}px` }}
@@ -181,7 +238,7 @@ export default function SupplierCategoriesPage() {
 
           {/* Category name */}
           <span className="flex-grow font-medium text-gray-700">
-            {category.name}
+            {displayName}
           </span>
 
           {/* Product count */}
@@ -245,6 +302,34 @@ export default function SupplierCategoriesPage() {
               {totalCategories} kategórií • {mappedCategories} prepojených
             </p>
           </div>
+          
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRegenerate}
+              disabled={actionLoading !== null}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {actionLoading === 'regenerate' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Regenerovať z produktov
+            </button>
+            <button
+              onClick={handleDeleteAll}
+              disabled={actionLoading !== null}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {actionLoading === 'delete' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Vymazať všetky
+            </button>
+          </div>
         </div>
       </div>
 
@@ -306,9 +391,21 @@ export default function SupplierCategoriesPage() {
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <FolderTree className="w-16 h-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-medium mb-2">Žiadne kategórie</h3>
-          <p className="text-gray-500">
-            Najprv importujte produkty z feedu
+          <p className="text-gray-500 mb-4">
+            Najprv importujte produkty z feedu, potom kliknite na "Regenerovať z produktov"
           </p>
+          <button
+            onClick={handleRegenerate}
+            disabled={actionLoading !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {actionLoading === 'regenerate' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Regenerovať kategórie z produktov
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm p-4">

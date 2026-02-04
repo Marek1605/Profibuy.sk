@@ -1134,15 +1134,25 @@ func runImport(db *database.Postgres, supplier *models.Supplier, storedFeed *mod
 		}
 	}
 
+	// Extract categories from products (Action XML doesn't have Categories section)
+	updateProgress("running", "Extracting categories from products...")
+	catCount, catErr := db.ExtractCategoriesFromProducts(ctx, supplier.ID)
+	if catErr != nil {
+		fmt.Printf("[Import] Warning: Failed to extract categories: %v\n", catErr)
+	} else {
+		feedImport.CategoriesCreated = catCount
+		fmt.Printf("[Import] Extracted %d categories from products\n", catCount)
+	}
+
 	// Complete
 	feedImport.Status = "completed"
 	feedImport.FinishedAt = time.Now()
 	feedImport.DurationMs = int(time.Since(startTime).Milliseconds())
-	updateProgress("completed", fmt.Sprintf("Import completed! Created: %d, Updated: %d, Errors: %d", feedImport.Created, feedImport.Updated, feedImport.Errors))
+	updateProgress("completed", fmt.Sprintf("Import completed! Created: %d, Updated: %d, Categories: %d, Errors: %d", feedImport.Created, feedImport.Updated, feedImport.CategoriesCreated, feedImport.Errors))
 
 	// Update stored feed stats
 	storedFeed.TotalProducts = totalProducts
-	storedFeed.TotalCategories = len(catalog.Categories.MainCategories)
+	storedFeed.TotalCategories = catCount
 	storedFeed.TotalBrands = len(catalog.Producers.Producers)
 	storedFeed.Status = "imported"
 	db.UpdateStoredFeed(ctx, storedFeed)
@@ -1802,6 +1812,72 @@ func DeleteAllSupplierProducts(db *database.Postgres) gin.HandlerFunc {
 			"success":                   true,
 			"deleted_supplier_products": deletedSupplier,
 			"deleted_main_products":     deletedMain,
+		})
+	}
+}
+
+// DeleteAllSupplierCategories handles DELETE /api/admin/suppliers/:id/categories
+func DeleteAllSupplierCategories(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		supplierID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid supplier ID"})
+			return
+		}
+
+		ctx := context.Background()
+		deleted, err := db.DeleteAllSupplierCategoriesForSupplier(ctx, supplierID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"deleted": deleted,
+			"message": fmt.Sprintf("Deleted %d supplier categories", deleted),
+		})
+	}
+}
+
+// DeleteAllCategories handles DELETE /api/admin/categories
+func DeleteAllCategories(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := context.Background()
+		deleted, err := db.DeleteAllCategories(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"deleted": deleted,
+			"message": fmt.Sprintf("Deleted %d categories", deleted),
+		})
+	}
+}
+
+// RegenerateCategoriesFromProducts handles POST /api/admin/suppliers/:id/categories/regenerate
+func RegenerateCategoriesFromProducts(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		supplierID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid supplier ID"})
+			return
+		}
+
+		ctx := context.Background()
+		count, err := db.ExtractCategoriesFromProducts(ctx, supplierID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success":    true,
+			"categories": count,
+			"message":    fmt.Sprintf("Regenerated %d categories from products", count),
 		})
 	}
 }

@@ -487,25 +487,46 @@ func UpdateCategory(db *database.Postgres, redisCache *cache.Redis) gin.HandlerF
 		ctx := c.Request.Context()
 		id, _ := uuid.Parse(c.Param("id"))
 
-		var category models.Category
-		if err := c.ShouldBindJSON(&category); err != nil {
+		// Parse input as map to support partial updates
+		var input map[string]interface{}
+		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		category.ID = id
-		category.UpdatedAt = time.Now()
+		// Build dynamic UPDATE query from provided fields
+		var setClauses []string
+		var args []interface{}
+		argNum := 1
 
-		query := `
-			UPDATE categories SET
-				parent_id = $2, slug = $3, name = $4, description = $5, image = $6,
-				position = $7, meta_title = $8, meta_description = $9, updated_at = $10
-			WHERE id = $1
-		`
-		_, err := db.Pool().Exec(ctx, query,
-			category.ID, category.ParentID, category.Slug, category.Name, category.Description,
-			category.Image, category.Position, category.MetaTitle, category.MetaDesc, category.UpdatedAt,
-		)
+		// ID is always $1
+		args = append(args, id)
+		argNum++
+
+		fieldMap := map[string]string{
+			"name": "name", "slug": "slug", "description": "description",
+			"image": "image", "position": "position", "parent_id": "parent_id",
+			"meta_title": "meta_title", "meta_description": "meta_description",
+		}
+
+		for jsonField, dbField := range fieldMap {
+			if val, ok := input[jsonField]; ok {
+				setClauses = append(setClauses, fmt.Sprintf("%s = $%d", dbField, argNum))
+				args = append(args, val)
+				argNum++
+			}
+		}
+
+		setClauses = append(setClauses, "updated_at = NOW()")
+
+		if len(setClauses) == 1 {
+			// Only updated_at, nothing to do
+			c.JSON(http.StatusOK, gin.H{"success": true})
+			return
+		}
+
+		query := fmt.Sprintf("UPDATE categories SET %s WHERE id = $1", strings.Join(setClauses, ", "))
+		_, err := db.Pool().Exec(ctx, query, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -516,7 +537,7 @@ func UpdateCategory(db *database.Postgres, redisCache *cache.Redis) gin.HandlerF
 			redisCache.Delete(ctx, cache.KeyCategories)
 		}
 
-		c.JSON(http.StatusOK, category)
+		c.JSON(http.StatusOK, gin.H{"success": true})
 	}
 }
 

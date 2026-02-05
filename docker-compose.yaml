@@ -37,14 +37,14 @@ services:
       DATABASE_URL: postgres://${DB_USER:-megashop}:${DB_PASSWORD:-megashop123}@postgres:5432/${DB_NAME:-megashop}?sslmode=disable
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-supersecretkey123}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://profibuy.net,https://www.profibuy.net}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://megazdravie.sk,https://www.megazdravie.sk}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-objednavky@profibuy.net}
-      SHOP_NAME: ${SHOP_NAME:-ProfiBuy.net}
-      SHOP_URL: ${SHOP_URL:-https://profibuy.net}
+      SMTP_FROM: ${SMTP_FROM:-objednavky@megazdravie.sk}
+      SHOP_NAME: ${SHOP_NAME:-MegaZdravie.sk}
+      SHOP_URL: ${SHOP_URL:-https://megazdravie.sk}
     volumes:
       - storage_data:/app/storage
     expose:

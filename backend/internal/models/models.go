@@ -29,6 +29,11 @@ type Product struct {
 	FeedID      *uuid.UUID      `json:"feed_id,omitempty" db:"feed_id"`
 	ExternalID  string          `json:"external_id,omitempty" db:"external_id"`
 	Weight      float64         `json:"weight" db:"weight"`
+	EAN              string     `json:"ean,omitempty" db:"ean"`
+	DeliveryDays     int        `json:"delivery_days,omitempty" db:"delivery_days"`
+	HeurekaCPC       *float64   `json:"heureka_cpc,omitempty" db:"heureka_cpc"`
+	ItemGroupID      string     `json:"itemgroup_id,omitempty" db:"itemgroup_id"`
+	ManufacturerName string     `json:"manufacturer_name,omitempty" db:"manufacturer_name"`
 	SearchVector string         `json:"-" db:"search_vector"` // tsvector pre full-text search
 	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`

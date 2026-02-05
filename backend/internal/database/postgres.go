@@ -841,6 +841,7 @@ func (p *Postgres) Migrate() error {
 	}{
 		{"001_schema.sql", migration001},
 		{"002_suppliers.sql", migration002},
+		{"003_heureka_export.sql", migration003},
 	}
 
 	for _, m := range migrations {

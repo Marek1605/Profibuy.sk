@@ -1334,26 +1334,54 @@ func parseProductFilter(c *gin.Context) models.ProductFilter {
 }
 
 func buildCategoryTree(categories []models.Category) []models.Category {
+	// Create map with pointers to new category objects
 	categoryMap := make(map[uuid.UUID]*models.Category)
-	var roots []models.Category
-
-	for i := range categories {
-		cat := &categories[i]
-		categoryMap[cat.ID] = cat
+	
+	// First pass: create all category objects in map
+	for _, cat := range categories {
+		catCopy := cat
+		catCopy.Children = []models.Category{} // Initialize empty children slice
+		categoryMap[cat.ID] = &catCopy
 	}
-
-	for i := range categories {
-		cat := &categories[i]
+	
+	// Second pass: build parent-child relationships
+	var roots []*models.Category
+	for _, cat := range categories {
+		currentCat := categoryMap[cat.ID]
 		if cat.ParentID == nil {
-			roots = append(roots, *cat)
+			roots = append(roots, currentCat)
 		} else {
 			if parent, ok := categoryMap[*cat.ParentID]; ok {
-				parent.Children = append(parent.Children, *cat)
+				parent.Children = append(parent.Children, *currentCat)
+			} else {
+				// Parent not found, treat as root
+				roots = append(roots, currentCat)
 			}
 		}
 	}
+	
+	// Rebuild children recursively to get proper nesting
+	var result []models.Category
+	for _, root := range roots {
+		result = append(result, buildCategoryWithChildren(root, categoryMap))
+	}
+	
+	return result
+}
 
-	return roots
+func buildCategoryWithChildren(cat *models.Category, categoryMap map[uuid.UUID]*models.Category) models.Category {
+	result := *cat
+	result.Children = []models.Category{}
+	
+	// Find all children from original map
+	for _, c := range categoryMap {
+		if c.ParentID != nil && *c.ParentID == cat.ID {
+			child := buildCategoryWithChildren(c, categoryMap)
+			result.Children = append(result.Children, child)
+		}
+	}
+	
+	return result
 }
 
 func generateSlug(name string) string {

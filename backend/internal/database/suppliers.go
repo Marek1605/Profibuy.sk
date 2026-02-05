@@ -905,44 +905,97 @@ func (p *Postgres) GetUnlinkedSupplierProducts(ctx context.Context, supplierID u
 	return products, nil
 }
 
-// GetOrCreateCategoryByPath finds or creates category hierarchy
+// GetOrCreateCategoryByPath finds or creates category hierarchy with proper parent relationships
 func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, subsub string) (*models.Category, error) {
-	// Use the most specific category available
-	categoryName := main
-	if sub != "" {
-		categoryName = sub
-	}
-	if subsub != "" {
-		categoryName = subsub
-	}
-	
-	if categoryName == "" {
+	if main == "" {
 		return nil, nil
 	}
-	
-	// Check if exists
-	var cat models.Category
-	err := p.pool.QueryRow(ctx, `SELECT id, name, slug FROM categories WHERE name = $1`, categoryName).Scan(&cat.ID, &cat.Name, &cat.Slug)
-	if err == nil {
-		return &cat, nil
+
+	// Helper to generate slug
+	makeSlug := func(name string) string {
+		slug := strings.ToLower(name)
+		replacements := map[string]string{
+			" ": "-", "á": "a", "ä": "a", "č": "c", "ď": "d", "é": "e", "ě": "e",
+			"í": "i", "ľ": "l", "ĺ": "l", "ň": "n", "ó": "o", "ô": "o", "ö": "o",
+			"ŕ": "r", "ř": "r", "š": "s", "ť": "t", "ú": "u", "ů": "u", "ü": "u",
+			"ý": "y", "ž": "z", "&": "-and-", "/": "-", "\\": "-", ",": "", "'": "",
+		}
+		for old, new := range replacements {
+			slug = strings.ReplaceAll(slug, old, new)
+		}
+		return slug
 	}
-	
-	// Create new category
-	cat.ID = uuid.New()
-	cat.Name = categoryName
-	cat.Slug = strings.ToLower(strings.ReplaceAll(categoryName, " ", "-"))
-	
-	_, err = p.pool.Exec(ctx, `
-		INSERT INTO categories (id, name, slug, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
-		ON CONFLICT (slug) DO NOTHING
-	`, cat.ID, cat.Name, cat.Slug)
-	
+
+	// 1. Get or create main category
+	var mainCat models.Category
+	mainSlug := makeSlug(main)
+	err := p.pool.QueryRow(ctx, `SELECT id, name, slug, parent_id FROM categories WHERE slug = $1`, mainSlug).Scan(&mainCat.ID, &mainCat.Name, &mainCat.Slug, &mainCat.ParentID)
 	if err != nil {
-		return nil, err
+		// Create main category
+		mainCat.ID = uuid.New()
+		mainCat.Name = main
+		mainCat.Slug = mainSlug
+		_, err = p.pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
+			VALUES ($1, $2, $3, NULL, NOW(), NOW())
+			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
+		`, mainCat.ID, mainCat.Name, mainCat.Slug)
+		if err != nil {
+			return nil, fmt.Errorf("create main category: %w", err)
+		}
 	}
-	
-	return &cat, nil
+
+	// If no sub category, return main
+	if sub == "" {
+		return &mainCat, nil
+	}
+
+	// 2. Get or create sub category
+	var subCat models.Category
+	subSlug := makeSlug(sub)
+	err = p.pool.QueryRow(ctx, `SELECT id, name, slug, parent_id FROM categories WHERE slug = $1`, subSlug).Scan(&subCat.ID, &subCat.Name, &subCat.Slug, &subCat.ParentID)
+	if err != nil {
+		// Create sub category with parent
+		subCat.ID = uuid.New()
+		subCat.Name = sub
+		subCat.Slug = subSlug
+		subCat.ParentID = &mainCat.ID
+		_, err = p.pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NOW(), NOW())
+			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, parent_id = COALESCE(categories.parent_id, EXCLUDED.parent_id), updated_at = NOW()
+		`, subCat.ID, subCat.Name, subCat.Slug, subCat.ParentID)
+		if err != nil {
+			return nil, fmt.Errorf("create sub category: %w", err)
+		}
+	}
+
+	// If no subsub category, return sub
+	if subsub == "" {
+		return &subCat, nil
+	}
+
+	// 3. Get or create subsub category
+	var subsubCat models.Category
+	subsubSlug := makeSlug(subsub)
+	err = p.pool.QueryRow(ctx, `SELECT id, name, slug, parent_id FROM categories WHERE slug = $1`, subsubSlug).Scan(&subsubCat.ID, &subsubCat.Name, &subsubCat.Slug, &subsubCat.ParentID)
+	if err != nil {
+		// Create subsub category with parent
+		subsubCat.ID = uuid.New()
+		subsubCat.Name = subsub
+		subsubCat.Slug = subsubSlug
+		subsubCat.ParentID = &subCat.ID
+		_, err = p.pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NOW(), NOW())
+			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, parent_id = COALESCE(categories.parent_id, EXCLUDED.parent_id), updated_at = NOW()
+		`, subsubCat.ID, subsubCat.Name, subsubCat.Slug, subsubCat.ParentID)
+		if err != nil {
+			return nil, fmt.Errorf("create subsub category: %w", err)
+		}
+	}
+
+	return &subsubCat, nil
 }
 
 // GetOrCreateBrand finds or creates a brand

@@ -919,10 +919,16 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 			"í": "i", "ľ": "l", "ĺ": "l", "ň": "n", "ó": "o", "ô": "o", "ö": "o",
 			"ŕ": "r", "ř": "r", "š": "s", "ť": "t", "ú": "u", "ů": "u", "ü": "u",
 			"ý": "y", "ž": "z", "&": "-and-", "/": "-", "\\": "-", ",": "", "'": "",
+			"(": "", ")": "", "_": "-",
 		}
 		for old, new := range replacements {
 			slug = strings.ReplaceAll(slug, old, new)
 		}
+		// Remove double hyphens
+		for strings.Contains(slug, "--") {
+			slug = strings.ReplaceAll(slug, "--", "-")
+		}
+		slug = strings.Trim(slug, "-")
 		return slug
 	}
 
@@ -939,9 +945,11 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 			INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
 			VALUES ($1, $2, $3, NULL, NOW(), NOW())
 			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
+			RETURNING id
 		`, mainCat.ID, mainCat.Name, mainCat.Slug)
 		if err != nil {
-			return nil, fmt.Errorf("create main category: %w", err)
+			// Slug conflict - fetch existing
+			p.pool.QueryRow(ctx, `SELECT id FROM categories WHERE slug = $1`, mainSlug).Scan(&mainCat.ID)
 		}
 	}
 
@@ -950,9 +958,13 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 		return &mainCat, nil
 	}
 
-	// 2. Get or create sub category
+	// 2. Get or create sub category - use parent-prefixed slug for uniqueness
 	var subCat models.Category
-	subSlug := makeSlug(sub)
+	subSlug := mainSlug + "-" + makeSlug(sub)
+	// Limit slug length
+	if len(subSlug) > 200 {
+		subSlug = subSlug[:200]
+	}
 	err = p.pool.QueryRow(ctx, `SELECT id, name, slug, parent_id FROM categories WHERE slug = $1`, subSlug).Scan(&subCat.ID, &subCat.Name, &subCat.Slug, &subCat.ParentID)
 	if err != nil {
 		// Create sub category with parent
@@ -966,7 +978,7 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, parent_id = COALESCE(categories.parent_id, EXCLUDED.parent_id), updated_at = NOW()
 		`, subCat.ID, subCat.Name, subCat.Slug, subCat.ParentID)
 		if err != nil {
-			return nil, fmt.Errorf("create sub category: %w", err)
+			p.pool.QueryRow(ctx, `SELECT id FROM categories WHERE slug = $1`, subSlug).Scan(&subCat.ID)
 		}
 	}
 
@@ -975,9 +987,12 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 		return &subCat, nil
 	}
 
-	// 3. Get or create subsub category
+	// 3. Get or create subsub category - use parent-prefixed slug
 	var subsubCat models.Category
-	subsubSlug := makeSlug(subsub)
+	subsubSlug := subSlug + "-" + makeSlug(subsub)
+	if len(subsubSlug) > 200 {
+		subsubSlug = subsubSlug[:200]
+	}
 	err = p.pool.QueryRow(ctx, `SELECT id, name, slug, parent_id FROM categories WHERE slug = $1`, subsubSlug).Scan(&subsubCat.ID, &subsubCat.Name, &subsubCat.Slug, &subsubCat.ParentID)
 	if err != nil {
 		// Create subsub category with parent
@@ -991,7 +1006,7 @@ func (p *Postgres) GetOrCreateCategoryByPath(ctx context.Context, main, sub, sub
 			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, parent_id = COALESCE(categories.parent_id, EXCLUDED.parent_id), updated_at = NOW()
 		`, subsubCat.ID, subsubCat.Name, subsubCat.Slug, subsubCat.ParentID)
 		if err != nil {
-			return nil, fmt.Errorf("create subsub category: %w", err)
+			p.pool.QueryRow(ctx, `SELECT id FROM categories WHERE slug = $1`, subsubSlug).Scan(&subsubCat.ID)
 		}
 	}
 

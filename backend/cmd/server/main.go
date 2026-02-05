@@ -131,7 +131,8 @@ func main() {
 			admin.POST("/products/bulk", handlers.BulkUpdateProducts(db, redisCache))
 			admin.POST("/products/import", handlers.ImportProducts(db, redisCache))
 			
-			// Categories CRUD
+			// Categories CRUD (DELETE /all MUST be before /:id to avoid route conflict)
+			admin.DELETE("/categories/all", handlers.DeleteAllCategories(db, redisCache))
 			admin.POST("/categories", handlers.CreateCategory(db, redisCache))
 			admin.PUT("/categories/:id", handlers.UpdateCategory(db, redisCache))
 			admin.DELETE("/categories/:id", handlers.DeleteCategory(db, redisCache))
@@ -180,9 +181,6 @@ func main() {
 			admin.DELETE("/suppliers/:id/categories", handlers.DeleteAllSupplierCategories(db))
 			admin.POST("/suppliers/:id/categories/regenerate", handlers.RegenerateCategoriesFromProducts(db))
 			admin.GET("/suppliers/:id/brands", handlers.ListSupplierBrands(db))
-			
-			// Main categories management
-			admin.DELETE("/categories/all", handlers.DeleteAllCategories(db))
 			
 			// Link supplier products to main catalog
 			admin.POST("/suppliers/:id/link-all", handlers.LinkAllProducts(db))

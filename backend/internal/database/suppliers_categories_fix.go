@@ -170,6 +170,10 @@ func (p *Postgres) DeleteAllSupplierCategoriesForSupplier(ctx context.Context, s
 
 // DeleteAllCategories deletes all main store categories (admin endpoint)
 func (p *Postgres) DeleteAllCategories(ctx context.Context) (int64, error) {
+	// First unlink products from categories
+	_, _ = p.pool.Exec(ctx, `UPDATE products SET category_id = NULL WHERE category_id IS NOT NULL`)
+	
+	// Then delete all categories
 	result, err := p.pool.Exec(ctx, `DELETE FROM categories`)
 	if err != nil {
 		return 0, err

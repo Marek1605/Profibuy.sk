@@ -378,6 +378,23 @@ func GetCategory(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc
 			return
 		}
 
+		// Load children for this category
+		allCats, _ := db.ListCategories(ctx)
+		category.Children = []models.Category{}
+		for _, cat := range allCats {
+			if cat.ParentID != nil && *cat.ParentID == category.ID {
+				cat.Children = []models.Category{}
+				// Also load grandchildren
+				for _, gc := range allCats {
+					if gc.ParentID != nil && *gc.ParentID == cat.ID {
+						gc.Children = []models.Category{}
+						cat.Children = append(cat.Children, gc)
+					}
+				}
+				category.Children = append(category.Children, cat)
+			}
+		}
+
 		c.JSON(http.StatusOK, category)
 	}
 }
@@ -395,7 +412,17 @@ func GetCategoryProducts(db *database.Postgres, redisCache *cache.Redis, searchE
 			return
 		}
 
-		// Get products
+		// Load children for this category
+		allCats, _ := db.ListCategories(ctx)
+		category.Children = []models.Category{}
+		for _, cat := range allCats {
+			if cat.ParentID != nil && *cat.ParentID == category.ID {
+				cat.Children = []models.Category{}
+				category.Children = append(category.Children, cat)
+			}
+		}
+
+		// Get products - include products from child categories too
 		filter := parseProductFilter(c)
 		filter.CategoryID = &category.ID
 
@@ -1334,53 +1361,43 @@ func parseProductFilter(c *gin.Context) models.ProductFilter {
 }
 
 func buildCategoryTree(categories []models.Category) []models.Category {
-	// Create map with pointers to new category objects
+	// Create map with pointers
 	categoryMap := make(map[uuid.UUID]*models.Category)
-	
-	// First pass: create all category objects in map
-	for _, cat := range categories {
-		catCopy := cat
-		catCopy.Children = []models.Category{} // Initialize empty children slice
-		categoryMap[cat.ID] = &catCopy
+	for i := range categories {
+		categories[i].Children = []models.Category{}
+		categoryMap[categories[i].ID] = &categories[i]
 	}
-	
-	// Second pass: build parent-child relationships
-	var roots []*models.Category
-	for _, cat := range categories {
-		currentCat := categoryMap[cat.ID]
-		if cat.ParentID == nil {
-			roots = append(roots, currentCat)
+
+	// Build parent-child relationships
+	var roots []models.Category
+	for i := range categories {
+		if categories[i].ParentID == nil {
+			roots = append(roots, categories[i])
+		} else if parent, ok := categoryMap[*categories[i].ParentID]; ok {
+			parent.Children = append(parent.Children, categories[i])
 		} else {
-			if parent, ok := categoryMap[*cat.ParentID]; ok {
-				parent.Children = append(parent.Children, *currentCat)
-			} else {
-				// Parent not found, treat as root
-				roots = append(roots, currentCat)
+			// Parent not found, treat as root
+			roots = append(roots, categories[i])
+		}
+	}
+
+	// Re-read roots from map to get updated children
+	var result []models.Category
+	for i := range categories {
+		if categories[i].ParentID == nil {
+			if cat, ok := categoryMap[categories[i].ID]; ok {
+				result = append(result, *cat)
+			}
+		} else if _, ok := categoryMap[*categories[i].ParentID]; !ok {
+			if cat, ok := categoryMap[categories[i].ID]; ok {
+				result = append(result, *cat)
 			}
 		}
 	}
-	
-	// Rebuild children recursively to get proper nesting
-	var result []models.Category
-	for _, root := range roots {
-		result = append(result, buildCategoryWithChildren(root, categoryMap))
-	}
-	
-	return result
-}
 
-func buildCategoryWithChildren(cat *models.Category, categoryMap map[uuid.UUID]*models.Category) models.Category {
-	result := *cat
-	result.Children = []models.Category{}
-	
-	// Find all children from original map
-	for _, c := range categoryMap {
-		if c.ParentID != nil && *c.ParentID == cat.ID {
-			child := buildCategoryWithChildren(c, categoryMap)
-			result.Children = append(result.Children, child)
-		}
+	if result == nil {
+		return []models.Category{}
 	}
-	
 	return result
 }
 

@@ -23,6 +23,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 
+	"megashop/internal/cache"
 	"megashop/internal/database"
 	"megashop/internal/models"
 
@@ -1638,15 +1639,15 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 	progress.Total = len(products)
 	progress.Message = fmt.Sprintf("Processing %d products...", len(products))
 	
-	// Category cache
+	// Category cache - use FULL PATH as key to avoid collisions
 	categoryCache := make(map[string]uuid.UUID)
 	brandCache := make(map[string]uuid.UUID)
 	
 	for i, sp := range products {
-		// Get or create category
+		// Get or create category - use full path as cache key
 		var categoryID *uuid.UUID
-		categoryKey := sp.MainCategoryTree
-		if categoryKey != "" {
+		categoryKey := sp.MainCategoryTree + "|" + sp.CategoryTree + "|" + sp.SubCategoryTree
+		if sp.MainCategoryTree != "" {
 			if catID, ok := categoryCache[categoryKey]; ok {
 				categoryID = &catID
 			} else {
@@ -1729,6 +1730,17 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 			progress.Message = fmt.Sprintf("Processed %d/%d (created: %d, updated: %d)", 
 				progress.Processed, progress.Total, progress.Created, progress.Updated)
 		}
+	}
+	
+	// Update category product counts
+	progress.Message = "Updating category product counts..."
+	if err := db.UpdateAllCategoryProductCounts(ctx); err != nil {
+		fmt.Printf("[Link] Error updating category counts: %v\n", err)
+	}
+	
+	// Auto-set category images from products
+	if imgCount, err := db.AutoSetCategoryImages(ctx); err == nil {
+		fmt.Printf("[Link] Auto-set %d category images\n", imgCount)
 	}
 	
 	progress.Status = "completed"
@@ -1841,13 +1853,18 @@ func DeleteAllSupplierCategories(db *database.Postgres) gin.HandlerFunc {
 }
 
 // DeleteAllCategories handles DELETE /api/admin/categories
-func DeleteAllCategories(db *database.Postgres) gin.HandlerFunc {
+func DeleteAllCategories(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := context.Background()
 		deleted, err := db.DeleteAllCategories(ctx)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 			return
+		}
+
+		// Invalidate cache
+		if redisCache != nil {
+			redisCache.Delete(ctx, cache.KeyCategories)
 		}
 
 		c.JSON(http.StatusOK, gin.H{

@@ -63,9 +63,11 @@ func (p *Postgres) ListProducts(ctx context.Context, filter models.ProductFilter
 	// Base conditions
 	conditions = append(conditions, "status = 'active'")
 
-	// Category filter
+	// Category filter - include products from child categories
 	if filter.CategoryID != nil {
-		conditions = append(conditions, fmt.Sprintf("(category_id = $%d OR category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $%d)))", argNum, argNum))
+		conditions = append(conditions, fmt.Sprintf(
+			"(category_id = $%d OR category_id IN (WITH RECURSIVE cat_tree AS (SELECT id FROM categories WHERE parent_id = $%d UNION ALL SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id) SELECT id FROM cat_tree))",
+			argNum, argNum))
 		args = append(args, *filter.CategoryID)
 		argNum++
 	}

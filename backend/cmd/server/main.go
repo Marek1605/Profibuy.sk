@@ -115,6 +115,10 @@ func main() {
 			// Shipping
 			public.GET("/shipping/methods", handlers.GetShippingMethods(db))
 			public.POST("/shipping/packeta/points", handlers.GetPacketaPoints(cfg))
+
+			// Export feeds (Heureka XML, etc.)
+			public.GET("/export/heureka.xml", handlers.ExportHeurekaXML(db, cfg, redisCache))
+			public.GET("/export/info", handlers.ExportInfo(db))
 			
 			// Auth
 			public.POST("/auth/login", handlers.Login(db, cfg))

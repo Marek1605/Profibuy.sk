@@ -24,9 +24,18 @@ type Config struct {
 	// Packeta
 	PacketaAPIKey    string
 	
+	// SMTP Email
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
+	ShopName     string
+	ShopURL      string
+
 	// Storage
-	StoragePath      string
-	CDNUrl           string
+	StoragePath string
+	CDNUrl      string
 }
 
 func Load() *Config {
@@ -51,8 +60,16 @@ func Load() *Config {
 		GoPayTestMode:    os.Getenv("GOPAY_TEST_MODE") == "true",
 		
 		PacketaAPIKey:    os.Getenv("PACKETA_API_KEY"),
-		
-		StoragePath:      getEnv("STORAGE_PATH", "./storage"),
+
+		SMTPHost:     getEnv("SMTP_HOST", ""),
+		SMTPPort:     getEnv("SMTP_PORT", "587"),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", "objednavky@profibuy.net"),
+		ShopName:     getEnv("SHOP_NAME", "ProfiBuy.net"),
+		ShopURL:      getEnv("SHOP_URL", "https://profibuy.net"),
+
+		StoragePath: getEnv("STORAGE_PATH", "./storage"),
 		CDNUrl:           getEnv("CDN_URL", ""),
 	}
 }

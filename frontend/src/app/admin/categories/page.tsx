@@ -69,6 +69,25 @@ export default function AdminCategoriesPage() {
     finally { setActionLoading(null) }
   }
 
+  async function handleAutoThumbnails() {
+    if (!confirm('Automaticky nastaviť obrázky kategórií z produktov? Nastaví sa len kategóriám bez obrázku.')) return
+    setActionLoading('autoThumbnails')
+    try {
+      const res = await fetch(`${API_BASE}/admin/categories/auto-thumbnails`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(data.message || `Aktualizovaných ${data.updated} kategórií`)
+        load()
+      } else {
+        alert('Chyba: ' + (data.error || 'Neznáma chyba'))
+      }
+    } catch { alert('Chyba pri nastavovaní obrázkov') }
+    finally { setActionLoading(null) }
+  }
+
   async function handleUpdate(id: string) {
     try {
       await fetch(`${API_BASE}/admin/categories/${id}`, {
@@ -265,6 +284,14 @@ export default function AdminCategoriesPage() {
           >
             {actionLoading === 'deleteAll' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
             Vymazať všetky
+          </button>
+          <button 
+            onClick={handleAutoThumbnails}
+            disabled={actionLoading !== null || categories.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium"
+          >
+            {actionLoading === 'autoThumbnails' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+            Auto-obrázky
           </button>
           <button 
             onClick={() => setShowForm(!showForm)} 

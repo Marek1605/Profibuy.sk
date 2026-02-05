@@ -12,6 +12,7 @@ import (
 	"megashop/internal/cache"
 	"megashop/internal/config"
 	"megashop/internal/database"
+	"megashop/internal/email"
 	"megashop/internal/handlers"
 	"megashop/internal/middleware"
 	"megashop/internal/search"
@@ -48,6 +49,14 @@ func main() {
 
 	// Search Engine
 	searchEngine := search.NewEngine(db, redisCache)
+
+	// Email Service
+	emailSvc := email.NewService(cfg)
+	if emailSvc.IsConfigured() {
+		log.Println("📧 Email service configured")
+	} else {
+		log.Println("⚠️  Email service NOT configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)")
+	}
 
 	// Gin router
 	if cfg.Environment == "production" {
@@ -93,7 +102,7 @@ func main() {
 			public.DELETE("/cart/:id/items/:itemId", handlers.RemoveFromCart(db))
 			
 			// Orders
-			public.POST("/orders", handlers.CreateOrder(db))
+			public.POST("/orders", handlers.CreateOrder(db, cfg, emailSvc))
 			public.GET("/orders/:id", handlers.GetOrder(db))
 			public.GET("/orders/track/:number", handlers.TrackOrder(db))
 			
@@ -133,6 +142,7 @@ func main() {
 			
 			// Categories CRUD (DELETE /all MUST be before /:id to avoid route conflict)
 			admin.DELETE("/categories/all", handlers.DeleteAllCategories(db, redisCache))
+			admin.POST("/categories/auto-thumbnails", handlers.AutoAssignCategoryThumbnails(db, redisCache))
 			admin.POST("/categories", handlers.CreateCategory(db, redisCache))
 			admin.PUT("/categories/:id", handlers.UpdateCategory(db, redisCache))
 			admin.DELETE("/categories/:id", handlers.DeleteCategory(db, redisCache))

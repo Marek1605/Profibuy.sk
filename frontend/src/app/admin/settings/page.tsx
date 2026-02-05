@@ -8,8 +8,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [settings, setSettings] = useState({
-    shop_name: 'ProfiBuy.sk',
-    shop_email: 'info@profibuy.sk',
+    shop_name: 'ProfiBuy.net',
+    shop_email: 'info@profibuy.net',
     shop_phone: '+421 900 000 000',
     shop_address: 'Bratislava, Slovensko',
     currency: 'EUR',

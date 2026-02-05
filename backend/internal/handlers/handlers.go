@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"megashop/internal/cache"
 	"megashop/internal/config"
 	"megashop/internal/database"
+	"megashop/internal/email"
 	"megashop/internal/models"
 	"megashop/internal/search"
 
@@ -562,6 +564,137 @@ func DeleteCategory(db *database.Postgres, redisCache *cache.Redis) gin.HandlerF
 	}
 }
 
+// AutoAssignCategoryThumbnails handles POST /api/admin/categories/auto-thumbnails
+// For each category that has no image, finds a product in that category and uses its first image
+func AutoAssignCategoryThumbnails(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Get all categories without an image (or empty image)
+		rows, err := db.Pool().Query(ctx, `
+			SELECT c.id, c.name
+			FROM categories c
+			WHERE c.image IS NULL OR c.image = ''
+		`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type catInfo struct {
+			ID   uuid.UUID
+			Name string
+		}
+		var catsWithoutImage []catInfo
+		for rows.Next() {
+			var ci catInfo
+			rows.Scan(&ci.ID, &ci.Name)
+			catsWithoutImage = append(catsWithoutImage, ci)
+		}
+
+		if len(catsWithoutImage) == 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Všetky kategórie už majú obrázok",
+				"updated": 0,
+			})
+			return
+		}
+
+		updated := 0
+		skipped := 0
+
+		for _, cat := range catsWithoutImage {
+			// Try to find a product in this category that has images
+			// First: direct products in this category
+			// Then: products in child categories (recursive via ltree or parent_id)
+			var imageJSON json.RawMessage
+			err := db.Pool().QueryRow(ctx, `
+				SELECT p.images
+				FROM products p
+				WHERE p.category_id = $1
+				  AND p.images IS NOT NULL
+				  AND p.images != '[]'::jsonb
+				  AND p.images != 'null'::jsonb
+				  AND jsonb_array_length(p.images) > 0
+				  AND p.status = 'active'
+				ORDER BY p.stock DESC, p.created_at DESC
+				LIMIT 1
+			`, cat.ID).Scan(&imageJSON)
+
+			if err != nil {
+				// Try child categories
+				err = db.Pool().QueryRow(ctx, `
+					SELECT p.images
+					FROM products p
+					JOIN categories child ON p.category_id = child.id
+					WHERE child.parent_id = $1
+					  AND p.images IS NOT NULL
+					  AND p.images != '[]'::jsonb
+					  AND p.images != 'null'::jsonb
+					  AND jsonb_array_length(p.images) > 0
+					  AND p.status = 'active'
+					ORDER BY p.stock DESC, p.created_at DESC
+					LIMIT 1
+				`, cat.ID).Scan(&imageJSON)
+			}
+
+			if err != nil {
+				skipped++
+				continue
+			}
+
+			// Parse image array to get first image URL
+			var images []struct {
+				URL       string `json:"url"`
+				IsPrimary bool   `json:"is_primary"`
+				IsMain    bool   `json:"is_main"`
+			}
+			if jsonErr := json.Unmarshal(imageJSON, &images); jsonErr != nil || len(images) == 0 {
+				skipped++
+				continue
+			}
+
+			// Prefer primary/main image
+			imageURL := images[0].URL
+			for _, img := range images {
+				if img.IsPrimary || img.IsMain {
+					imageURL = img.URL
+					break
+				}
+			}
+
+			if imageURL == "" {
+				skipped++
+				continue
+			}
+
+			// Update category image
+			_, err = db.Pool().Exec(ctx,
+				"UPDATE categories SET image = $1, updated_at = NOW() WHERE id = $2",
+				imageURL, cat.ID,
+			)
+			if err == nil {
+				updated++
+			}
+		}
+
+		// Invalidate cache
+		if redisCache != nil {
+			redisCache.Delete(ctx, cache.KeyCategories)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success":  true,
+			"updated":  updated,
+			"skipped":  skipped,
+			"total":    len(catsWithoutImage),
+			"message":  fmt.Sprintf("Aktualizovaných %d kategórií, %d preskočených (bez produktov s obrázkami)", updated, skipped),
+		})
+	}
+}
+
 // ==================== FILTERS ====================
 
 // GetFilters handles GET /api/filters
@@ -757,12 +890,14 @@ func RemoveFromCart(db *database.Postgres) gin.HandlerFunc {
 // ==================== ORDERS ====================
 
 // CreateOrder handles POST /api/orders
-func CreateOrder(db *database.Postgres) gin.HandlerFunc {
+func CreateOrder(db *database.Postgres, cfg *config.Config, emailSvc *email.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
 		var req struct {
-			CartID          uuid.UUID       `json:"cart_id"`
+			// Support both modes: cart_id based or direct items
+			CartID          *uuid.UUID      `json:"cart_id,omitempty"`
+			Items           []OrderItemReq  `json:"items,omitempty"`
 			PaymentMethod   string          `json:"payment_method"`
 			ShippingMethod  string          `json:"shipping_method"`
 			BillingAddress  models.Address  `json:"billing_address"`
@@ -774,23 +909,82 @@ func CreateOrder(db *database.Postgres) gin.HandlerFunc {
 			return
 		}
 
-		// Get cart
-		cart, err := db.GetCart(ctx, req.CartID)
-		if err != nil || cart == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Cart not found"})
+		var orderItems []models.OrderItem
+		var subtotal float64
+
+		if req.CartID != nil {
+			// Cart-based order (original flow)
+			cart, err := db.GetCart(ctx, *req.CartID)
+			if err != nil || cart == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Cart not found"})
+				return
+			}
+			if len(cart.Items) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Cart is empty"})
+				return
+			}
+			subtotal = cart.Total
+			for _, item := range cart.Items {
+				orderItems = append(orderItems, models.OrderItem{
+					ProductID: item.ProductID,
+					VariantID: item.VariantID,
+					SKU:       item.Product.SKU,
+					Name:      item.Product.Name,
+					Price:     item.Price,
+					Quantity:  item.Quantity,
+					Total:     item.Price * float64(item.Quantity),
+				})
+			}
+		} else if len(req.Items) > 0 {
+			// Direct items order (from frontend checkout)
+			for _, item := range req.Items {
+				productID, err := uuid.Parse(item.ProductID)
+				if err != nil {
+					continue
+				}
+				// Fetch product to get name/SKU
+				product, err := db.GetProduct(ctx, productID)
+				name := ""
+				sku := ""
+				price := item.Price
+				if err == nil && product != nil {
+					name = product.Name
+					sku = product.SKU
+					// Use DB price for security
+					if product.SalePrice != nil && *product.SalePrice > 0 {
+						price = *product.SalePrice
+					} else {
+						price = product.Price
+					}
+				}
+
+				itemTotal := price * float64(item.Quantity)
+				subtotal += itemTotal
+
+				orderItems = append(orderItems, models.OrderItem{
+					ProductID: productID,
+					SKU:       sku,
+					Name:      name,
+					Price:     price,
+					Quantity:  item.Quantity,
+					Total:     itemTotal,
+				})
+			}
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No items provided"})
 			return
 		}
 
-		if len(cart.Items) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Cart is empty"})
+		if len(orderItems) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No valid items"})
 			return
 		}
 
-		// Calculate totals
-		subtotal := cart.Total
-		shippingPrice := 4.99 // Default, should come from shipping method
-		tax := subtotal * 0.20 // 20% VAT
-		total := subtotal + shippingPrice + tax
+		// Determine shipping price from method
+		shippingPrice := getShippingPrice(req.ShippingMethod, subtotal)
+		paymentFee := getPaymentFee(req.PaymentMethod)
+		tax := subtotal * 0.20 // 20% DPH
+		total := subtotal + shippingPrice + paymentFee + tax
 
 		// Create order
 		billingJSON, _ := json.Marshal(req.BillingAddress)
@@ -805,23 +999,11 @@ func CreateOrder(db *database.Postgres) gin.HandlerFunc {
 			Subtotal:        subtotal,
 			Tax:             tax,
 			Total:           total,
-			Currency:        cart.Currency,
+			Currency:        "EUR",
 			BillingAddress:  billingJSON,
 			ShippingAddress: shippingJSON,
 			Note:            req.Note,
-		}
-
-		// Convert cart items to order items
-		for _, item := range cart.Items {
-			order.Items = append(order.Items, models.OrderItem{
-				ProductID: item.ProductID,
-				VariantID: item.VariantID,
-				SKU:       item.Product.SKU,
-				Name:      item.Product.Name,
-				Price:     item.Price,
-				Quantity:  item.Quantity,
-				Total:     item.Price * float64(item.Quantity),
-			})
+			Items:           orderItems,
 		}
 
 		if err := db.CreateOrder(ctx, order); err != nil {
@@ -829,11 +1011,53 @@ func CreateOrder(db *database.Postgres) gin.HandlerFunc {
 			return
 		}
 
-		// Clear cart
-		db.Pool().Exec(ctx, "DELETE FROM cart_items WHERE cart_id = $1", req.CartID)
+		// Clear cart if cart_id was provided
+		if req.CartID != nil {
+			db.Pool().Exec(ctx, "DELETE FROM cart_items WHERE cart_id = $1", req.CartID)
+		}
+
+		// Send confirmation email asynchronously
+		go func() {
+			if err := emailSvc.SendOrderConfirmation(order); err != nil {
+				log.Printf("[ORDER] Failed to send confirmation email for #%s: %v", order.OrderNumber, err)
+			}
+		}()
 
 		c.JSON(http.StatusCreated, order)
 	}
+}
+
+// OrderItemReq is the request structure for direct item orders
+type OrderItemReq struct {
+	ProductID string  `json:"product_id"`
+	Quantity  int     `json:"quantity"`
+	Price     float64 `json:"price"`
+}
+
+// getShippingPrice returns shipping price based on method and order subtotal
+func getShippingPrice(method string, subtotal float64) float64 {
+	freeFrom := 50.0
+	if subtotal >= freeFrom {
+		return 0
+	}
+	prices := map[string]float64{
+		"packeta": 2.99,
+		"dpd":     4.49,
+		"gls":     3.99,
+		"posta":   2.49,
+	}
+	if p, ok := prices[method]; ok {
+		return p
+	}
+	return 4.99
+}
+
+// getPaymentFee returns fee for payment method
+func getPaymentFee(method string) float64 {
+	if method == "cod" {
+		return 1.50
+	}
+	return 0
 }
 
 // GetOrder handles GET /api/orders/:id

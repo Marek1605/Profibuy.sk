@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ProfiBuy.sk - Vas online obchod',
-  description: 'Nakupujte kvalitne produkty za skvele ceny',
+  title: 'ProfiBuy.net - Váš online obchod',
+  description: 'Nakupujte kvalitné produkty za skvelé ceny',
 }
 
 export default function RootLayout({

@@ -55,7 +55,7 @@ export default function Footer() {
           <div>
             <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Kontakt</h4>
             <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center gap-2">📧 info@profibuy.sk</li>
+              <li className="flex items-center gap-2">📧 info@profibuy.net</li>
               <li className="flex items-center gap-2">📞 +421 900 000 000</li>
               <li className="flex items-center gap-2">🕐 Po-Pi: 8:00 - 16:00</li>
             </ul>
@@ -71,7 +71,7 @@ export default function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-gray-800">
         <div className="max-w-7xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-4 text-xs text-gray-500">
-          <p>&copy; {new Date().getFullYear()} ProfiBuy.sk. Vsetky prava vyhradene.</p>
+          <p>&copy; {new Date().getFullYear()} ProfiBuy.net. Vsetky prava vyhradene.</p>
           <div className="flex items-center gap-4">
             <span>Zasielkovna</span>
             <span>DPD</span>

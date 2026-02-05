@@ -64,6 +64,10 @@ export default function CheckoutPage() {
   }
 
   async function handleSubmit() {
+    if (!address.first_name || !address.last_name || !address.email || !address.phone || !address.street || !address.city || !address.postal_code) {
+      alert('Prosím vyplňte všetky povinné polia v adrese.')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/orders', {
@@ -82,8 +86,13 @@ export default function CheckoutPage() {
         const order = await res.json()
         clearCart()
         router.push(`/checkout/success?order=${order.order_number || order.id}`)
+      } else {
+        const err = await res.json().catch(() => null)
+        alert(`Chyba pri odoslaní objednávky: ${err?.error || 'Skúste to znova'}`)
       }
-    } catch {}
+    } catch (e) {
+      alert('Nepodarilo sa odoslať objednávku. Skontrolujte pripojenie a skúste znova.')
+    }
     setSubmitting(false)
   }
 

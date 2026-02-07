@@ -734,6 +734,57 @@ func GetCategoryFilters(db *database.Postgres, redisCache *cache.Redis) gin.Hand
 	}
 }
 
+// ==================== ATTRIBUTE FILTER MANAGEMENT ====================
+
+// GetAttributeStats returns attribute statistics for admin filter config
+func GetAttributeStats(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		stats, err := db.GetAttributeStats(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+	}
+}
+
+// GetFilterSettings returns saved filter configuration
+func GetFilterSettings(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		settings, err := db.GetFilterSettings(ctx)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": true, "data": map[string]interface{}{
+				"enabled": map[string]interface{}{},
+				"global_max_values": 10,
+				"show_counts": true,
+				"display_limit": 20,
+			}})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
+	}
+}
+
+// SaveFilterSettings saves filter configuration
+func SaveFilterSettings(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		var settings json.RawMessage
+		if err := c.ShouldBindJSON(&settings); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		err := db.SaveFilterSettings(ctx, settings)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	}
+}
+
 // ==================== CART ====================
 
 // CreateCart handles POST /api/cart

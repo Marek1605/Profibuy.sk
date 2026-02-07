@@ -751,7 +751,121 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 	}
 	rows.Close()
 
+	// Attributes from product attributes JSON array
+	// Format: [{"name": "...", "value": "..."}]
+	attrQuery := `
+		SELECT 
+			attr->>'name' as attr_name,
+			attr->>'value' as attr_value,
+			COUNT(*) as cnt
+		FROM products p,
+			jsonb_array_elements(
+				CASE 
+					WHEN jsonb_typeof(p.attributes) = 'array' THEN p.attributes
+					ELSE '[]'::jsonb
+				END
+			) as attr
+		WHERE p.status = 'active'
+			AND attr->>'name' IS NOT NULL 
+			AND attr->>'name' != ''
+			AND attr->>'value' IS NOT NULL 
+			AND attr->>'value' != ''
+	`
+	if categoryID != nil {
+		attrQuery += fmt.Sprintf(` AND (p.category_id = $%d OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $%d)))`, len(args)+1, len(args)+1)
+		args = append(args, *categoryID)
+	}
+	attrQuery += `
+		GROUP BY attr_name, attr_value
+		HAVING COUNT(*) >= 2
+		ORDER BY attr_name, cnt DESC
+	`
+
+	attrRows, err := p.pool.Query(context.Background(), attrQuery, args...)
+	if err == nil {
+		attrMap := make(map[string][]models.AttributeValue)
+		for attrRows.Next() {
+			var name, value string
+			var count int
+			attrRows.Scan(&name, &value, &count)
+			if name != "" && value != "" {
+				attrMap[name] = append(attrMap[name], models.AttributeValue{
+					Value: value,
+					Count: count,
+				})
+			}
+		}
+		attrRows.Close()
+
+		for name, values := range attrMap {
+			if len(values) > 1 { // Only show attributes with multiple values (useful for filtering)
+				filters.Attributes = append(filters.Attributes, models.AttributeFilter{
+					Name:   name,
+					Values: values,
+				})
+			}
+		}
+	}
+
 	return filters, nil
+}
+
+// GetAttributeStats returns statistics about product attributes for admin filter config
+func (p *Postgres) GetAttributeStats(ctx context.Context) ([]map[string]interface{}, error) {
+	query := `
+		SELECT 
+			attr->>'name' as attr_name,
+			COUNT(DISTINCT p.id) as product_count,
+			COUNT(DISTINCT attr->>'value') as total_values
+		FROM products p,
+			jsonb_array_elements(
+				CASE WHEN jsonb_typeof(p.attributes) = 'array' THEN p.attributes ELSE '[]'::jsonb END
+			) as attr
+		WHERE p.status = 'active'
+			AND attr->>'name' IS NOT NULL AND attr->>'name' != ''
+			AND attr->>'value' IS NOT NULL AND attr->>'value' != ''
+		GROUP BY attr_name
+		ORDER BY product_count DESC
+	`
+
+	rows, err := p.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []map[string]interface{}
+	for rows.Next() {
+		var name string
+		var productCount, totalValues int
+		rows.Scan(&name, &productCount, &totalValues)
+		result = append(result, map[string]interface{}{
+			"name":          name,
+			"product_count": productCount,
+			"total_values":  totalValues,
+		})
+	}
+
+	return result, nil
+}
+
+// GetFilterSettings retrieves saved filter configuration from settings table
+func (p *Postgres) GetFilterSettings(ctx context.Context) (json.RawMessage, error) {
+	var settings json.RawMessage
+	err := p.pool.QueryRow(ctx, `SELECT value FROM settings WHERE key = 'filter_settings'`).Scan(&settings)
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+// SaveFilterSettings stores filter configuration in settings table
+func (p *Postgres) SaveFilterSettings(ctx context.Context, settings json.RawMessage) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO settings (key, value, updated_at) VALUES ('filter_settings', $1, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+	`, settings)
+	return err
 }
 
 // ==================== STATS ====================

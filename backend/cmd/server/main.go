@@ -204,6 +204,14 @@ func main() {
 			// Cache management
 			admin.POST("/cache/clear", handlers.ClearCache(redisCache))
 			admin.POST("/cache/warmup", handlers.WarmupCache(db, redisCache))
+
+			// Filter management
+			admin.GET("/attributes/stats", handlers.GetAttributeStats(db))
+			admin.GET("/filter-settings", handlers.GetFilterSettings(db))
+			admin.POST("/filter-settings", handlers.SaveFilterSettings(db))
+
+			// Export feed management
+			admin.POST("/export/regenerate", handlers.RegenerateHeurekaXML(db, cfg))
 		}
 	}
 

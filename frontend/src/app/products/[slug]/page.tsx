@@ -239,29 +239,54 @@ export default function ProductDetailPage() {
             <div className="flex border-b overflow-x-auto no-scrollbar">
               {[
                 { key: 'description' as const, label: '📝 Popis' },
-                { key: 'params' as const, label: '📋 Parametre' },
+                { key: 'params' as const, label: `📋 Parametre${product.attributes?.length ? ` (${product.attributes.length})` : ''}` },
                 { key: 'shipping' as const, label: '🚚 Doprava' },
                 ...(offers.length > 0 ? [{ key: 'offers' as const, label: `📊 Ponuky (${offers.length})` }] : []),
               ].map(tab => (
-                <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-6 py-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === tab.key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>{tab.label}</button>
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-6 py-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === tab.key ? 'text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`} style={activeTab === tab.key ? { borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}>{tab.label}</button>
               ))}
             </div>
             <div className="p-6 lg:p-8">
               {activeTab === 'description' && (
-                <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed">
-                  {product.description ? <div dangerouslySetInnerHTML={{ __html: product.description }} /> : <p className="text-gray-400">Popis nie je dostupný.</p>}
+                <div>
+                  {product.description ? (
+                    <>
+                      <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: product.description }} />
+                      {/* Show attributes below description if available */}
+                      {product.attributes && product.attributes.length > 0 && (
+                        <div className="mt-8 pt-8 border-t border-gray-100">
+                          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                            Technické parametre
+                          </h3>
+                          <ProductAttributesTable attributes={product.attributes} />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* No description - show attributes as primary content */
+                    product.attributes && product.attributes.length > 0 ? (
+                      <div>
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--primary)', opacity: 0.1 }}>
+                            <svg className="w-5 h-5" style={{ color: 'var(--primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">Technické parametre</h3>
+                            <p className="text-sm text-gray-400">{product.attributes.length} parametrov</p>
+                          </div>
+                        </div>
+                        <ProductAttributesTable attributes={product.attributes} />
+                      </div>
+                    ) : (
+                      <p className="text-gray-400">Popis nie je dostupný.</p>
+                    )
+                  )}
                 </div>
               )}
               {activeTab === 'params' && (
                 product.attributes && product.attributes.length > 0 ? (
-                  <div className="grid md:grid-cols-2 gap-3">
-                    {product.attributes.map((attr, i) => (
-                      <div key={i} className={`flex justify-between p-4 rounded-xl ${i % 2 === 0 ? 'bg-gray-50' : 'bg-white border'}`}>
-                        <span className="text-gray-600 font-medium">{attr.name}</span>
-                        <span className="text-gray-900 font-semibold">{attr.value}{attr.unit ? ` ${attr.unit}` : ''}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <ProductAttributesTable attributes={product.attributes} />
                 ) : <p className="text-gray-400">Žiadne parametre.</p>
               )}
               {activeTab === 'shipping' && (
@@ -350,5 +375,29 @@ export default function ProductDetailPage() {
 
       <Footer />
     </>
+  )
+}
+
+// Beautiful attributes table with zebra stripes and grouped sections
+function ProductAttributesTable({ attributes }: { attributes: { name: string; value: string; unit?: string }[] }) {
+  if (!attributes || attributes.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <table className="w-full">
+        <tbody>
+          {attributes.map((attr, i) => (
+            <tr key={i} className={`${i % 2 === 0 ? 'bg-gray-50/70' : 'bg-white'} ${i < attributes.length - 1 ? 'border-b border-gray-100' : ''}`}>
+              <td className="px-5 py-3.5 text-sm text-gray-500 font-medium w-2/5 align-top">
+                {attr.name}
+              </td>
+              <td className="px-5 py-3.5 text-sm text-gray-900 font-semibold">
+                {attr.value}{attr.unit ? <span className="text-gray-400 font-normal ml-1">{attr.unit}</span> : ''}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

@@ -1675,7 +1675,10 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 		
 		// Convert images and specs to JSON
 		imagesJSON, _ := json.Marshal(sp.Images)
+		
+		// Flatten technical specs from Action format to flat attribute array
 		specsJSON, _ := json.Marshal(sp.TechnicalSpecs)
+		flatAttrs := flattenTechSpecs(specsJSON)
 		
 		// Create main product
 		mainProduct := &models.Product{
@@ -1689,7 +1692,7 @@ func runLinkAll(db *database.Postgres, supplier *models.Supplier, linkID string)
 			CategoryID:  categoryID,
 			BrandID:     brandID,
 			Images:      imagesJSON,
-			Attributes:  specsJSON,
+			Attributes:  flatAttrs,
 			ExternalID:  sp.ExternalID,
 			Status:      "active",
 			Weight:      sp.Weight,
@@ -1897,4 +1900,92 @@ func RegenerateCategoriesFromProducts(db *database.Postgres) gin.HandlerFunc {
 			"message":    fmt.Sprintf("Regenerated %d categories from products", count),
 		})
 	}
+}
+
+// flattenTechSpecs converts Action XML technical_specs format to flat attribute array
+// Input:  {"Section": {"attributes": {"Name": ["Value1"]}, "parameters": {"Key": "Val"}}}
+// Output: [{"name": "Name", "value": "Value1"}, {"name": "Key", "value": "Val"}]
+func flattenTechSpecs(specsJSON json.RawMessage) json.RawMessage {
+	if len(specsJSON) < 3 || string(specsJSON) == "{}" || string(specsJSON) == "null" {
+		return []byte("[]")
+	}
+
+	// Try parsing as already-flat array first
+	var flatCheck []map[string]interface{}
+	if err := json.Unmarshal(specsJSON, &flatCheck); err == nil && len(flatCheck) > 0 {
+		if _, hasName := flatCheck[0]["name"]; hasName {
+			return specsJSON // Already flat format
+		}
+	}
+
+	// Parse as Action technical_specs format (nested sections)
+	var sections map[string]json.RawMessage
+	if err := json.Unmarshal(specsJSON, &sections); err != nil {
+		return []byte("[]")
+	}
+
+	type FlatAttr struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+		Unit  string `json:"unit,omitempty"`
+	}
+
+	var result []FlatAttr
+	seen := make(map[string]bool)
+
+	for _, sectionData := range sections {
+		var section struct {
+			Attributes map[string][]string `json:"attributes"`
+			Parameters map[string]string   `json:"parameters"`
+		}
+		if err := json.Unmarshal(sectionData, &section); err != nil {
+			continue
+		}
+
+		// Process attributes: {"Name": ["Value1", "Value2"]}
+		for attrName, values := range section.Attributes {
+			if attrName == "" || seen[attrName] {
+				continue
+			}
+			var nonEmpty []string
+			for _, v := range values {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					nonEmpty = append(nonEmpty, v)
+				}
+			}
+			if len(nonEmpty) == 0 {
+				continue
+			}
+			seen[attrName] = true
+			result = append(result, FlatAttr{
+				Name:  attrName,
+				Value: strings.Join(nonEmpty, ", "),
+			})
+		}
+
+		// Process parameters: {"Key": "Value"}
+		for paramName, paramValue := range section.Parameters {
+			paramName = strings.TrimSpace(paramName)
+			paramValue = strings.TrimSpace(paramValue)
+			if paramName == "" || paramValue == "" || seen[paramName] {
+				continue
+			}
+			seen[paramName] = true
+			result = append(result, FlatAttr{
+				Name:  paramName,
+				Value: paramValue,
+			})
+		}
+	}
+
+	if len(result) == 0 {
+		return []byte("[]")
+	}
+
+	out, err := json.Marshal(result)
+	if err != nil {
+		return []byte("[]")
+	}
+	return out
 }

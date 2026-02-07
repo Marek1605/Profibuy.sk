@@ -753,6 +753,7 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 
 	// Attributes from product attributes JSON array
 	// Format: [{"name": "...", "value": "..."}]
+	var attrArgs []interface{}
 	attrQuery := `
 		SELECT 
 			attr->>'name' as attr_name,
@@ -772,8 +773,8 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 			AND attr->>'value' != ''
 	`
 	if categoryID != nil {
-		attrQuery += fmt.Sprintf(` AND (p.category_id = $%d OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $%d)))`, len(args)+1, len(args)+1)
-		args = append(args, *categoryID)
+		attrQuery += ` AND (p.category_id = $1 OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $1)))`
+		attrArgs = append(attrArgs, *categoryID)
 	}
 	attrQuery += `
 		GROUP BY attr_name, attr_value
@@ -781,7 +782,7 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 		ORDER BY attr_name, cnt DESC
 	`
 
-	attrRows, err := p.pool.Query(context.Background(), attrQuery, args...)
+	attrRows, err := p.pool.Query(context.Background(), attrQuery, attrArgs...)
 	if err == nil {
 		attrMap := make(map[string][]models.AttributeValue)
 		for attrRows.Next() {
@@ -862,8 +863,8 @@ func (p *Postgres) GetFilterSettings(ctx context.Context) (json.RawMessage, erro
 // SaveFilterSettings stores filter configuration in settings table
 func (p *Postgres) SaveFilterSettings(ctx context.Context, settings json.RawMessage) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO settings (key, value, updated_at) VALUES ('filter_settings', $1, NOW())
-		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+		INSERT INTO settings (id, key, value, "group") VALUES (gen_random_uuid(), 'filter_settings', $1, 'filters')
+		ON CONFLICT (key) DO UPDATE SET value = $1
 	`, settings)
 	return err
 }

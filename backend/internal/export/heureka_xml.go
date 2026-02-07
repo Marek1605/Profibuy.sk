@@ -256,7 +256,7 @@ func (e *HeurekaExporter) loadProductBatch(ctx context.Context, limit, offset in
 		LEFT JOIN LATERAL (
 			SELECT sp2.ean, sp2.warranty, sp2.technical_specs, sp2.producer_name, sp2.description
 			FROM supplier_products sp2 
-			WHERE sp2.product_id = p.id
+			WHERE sp2.external_id = p.external_id
 			ORDER BY sp2.updated_at DESC
 			LIMIT 1
 		) sp ON true

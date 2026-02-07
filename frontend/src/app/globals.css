@@ -109,3 +109,12 @@ html { scroll-behavior: smooth; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
+/* Filter sidebar scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+
+/* Filter sidebar transitions */
+.filter-sidebar { @apply space-y-0; }
+

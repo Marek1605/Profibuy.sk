@@ -48,7 +48,7 @@ export default function ProductCard({ product }: { product: Product }) {
           <img 
             src={image} 
             alt={product.name || 'Produkt'} 
-            className="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-110" 
+            className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" 
             onError={() => setImgError(true)} 
             loading="lazy" 
           />

@@ -704,23 +704,22 @@ func (p *Postgres) GetCart(ctx context.Context, id uuid.UUID) (*models.Cart, err
 // ==================== FILTERS ====================
 
 func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) (*models.FilterOptions, error) {
-	var catCondition string
 	var args []interface{}
 
+	// Build category condition
+	catWhere := "WHERE p.status = 'active'"
 	if categoryID != nil {
-		catCondition = "WHERE category_id = $1 OR category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $1))"
+		catWhere += " AND (p.category_id = $1 OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $1)))"
 		args = append(args, *categoryID)
-	} else {
-		catCondition = "WHERE status = 'active'"
 	}
 
 	filters := &models.FilterOptions{}
 
 	// Price range
 	priceQuery := fmt.Sprintf(`
-		SELECT COALESCE(MIN(COALESCE(sale_price, price)), 0), COALESCE(MAX(COALESCE(sale_price, price)), 0)
-		FROM products %s
-	`, catCondition)
+		SELECT COALESCE(MIN(COALESCE(p.sale_price, p.price)), 0), COALESCE(MAX(COALESCE(p.sale_price, p.price)), 0)
+		FROM products p %s
+	`, catWhere)
 	p.pool.QueryRow(context.Background(), priceQuery, args...).Scan(&filters.PriceRange.Min, &filters.PriceRange.Max)
 
 	// Brands
@@ -731,17 +730,7 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 		%s
 		GROUP BY b.id, b.name
 		ORDER BY count DESC
-	`, strings.Replace(catCondition, "WHERE", "AND", 1))
-	if catCondition == "WHERE status = 'active'" {
-		brandQuery = `
-			SELECT b.id, b.name, COUNT(p.id) as count
-			FROM brands b
-			JOIN products p ON p.brand_id = b.id
-			WHERE p.status = 'active'
-			GROUP BY b.id, b.name
-			ORDER BY count DESC
-		`
-	}
+	`, catWhere)
 
 	rows, _ := p.pool.Query(context.Background(), brandQuery, args...)
 	for rows.Next() {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useAuthStore } from '@/lib/auth';
+import { useAuthStore } from '@/lib/store';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 

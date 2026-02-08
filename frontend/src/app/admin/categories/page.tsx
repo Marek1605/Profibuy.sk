@@ -223,7 +223,7 @@ export default function AdminCategoriesPage() {
             <div className="flex items-center gap-1 flex-shrink-0 ml-2">
               <span className="text-gray-300 text-xs mr-2 hidden sm:inline">{cat.slug}</span>
               {/* Published toggle */}
-              {depth === 0 && (
+              {level === 0 && (
                 <button
                   onClick={async () => {
                     const newVal = cat.published === false ? true : false

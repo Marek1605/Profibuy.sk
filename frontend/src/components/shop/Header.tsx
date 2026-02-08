@@ -7,11 +7,28 @@ import { useCartStore, useAuthStore } from '@/lib/store'
 import { getCategories } from '@/lib/api'
 import type { Category } from '@/types'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
+
+interface NavItem {
+  category_id: string
+  label_sk: string
+  label_en: string
+  position: number
+  visible: boolean
+  show_in_mega: boolean
+}
+
+interface NavSettings {
+  items: NavItem[]
+  max_visible: number
+}
+
 export default function Header() {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
+  const [navSettings, setNavSettings] = useState<NavSettings | null>(null)
   const [megaMenuOpen, setMegaMenuOpen] = useState(false)
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -24,18 +41,27 @@ export default function Header() {
   useEffect(() => {
     async function load() {
       try {
+        // Load categories
         const cats = await getCategories()
         setCategories(cats || [])
+
+        // Load nav settings
+        try {
+          const navRes = await fetch(`${API_BASE}/navigation`)
+          const navData = await navRes.json()
+          if (navData.success && navData.data?.items && navData.data.items.length > 0) {
+            setNavSettings(navData.data)
+          }
+        } catch (e) {
+          // Nav settings not available, use default categories
+        }
       } catch (e) {
         console.error('Failed to load categories:', e)
       }
     }
     load()
 
-    // Scroll handler for collapsed state
-    const handleScroll = () => {
-      setIsCollapsed(window.scrollY > 150)
-    }
+    const handleScroll = () => setIsCollapsed(window.scrollY > 150)
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
@@ -74,7 +100,48 @@ export default function Header() {
     return (name || 'K').charAt(0).toUpperCase()
   }
 
+  // Build navigation items - use saved settings or fallback to categories
+  const navCategories: { cat: Category; label: string; showMega: boolean }[] = []
+
+  if (navSettings && navSettings.items.length > 0) {
+    // Use saved navigation order and settings
+    navSettings.items
+      .filter(item => item.visible)
+      .sort((a, b) => a.position - b.position)
+      .forEach(item => {
+        const cat = categories.find(c => c.id === item.category_id)
+        if (cat) {
+          navCategories.push({
+            cat,
+            label: item.label_sk || item.label_en || cat.name,
+            showMega: item.show_in_mega,
+          })
+        }
+      })
+  } else {
+    // Fallback - show first 10 categories
+    categories.slice(0, 10).forEach(cat => {
+      navCategories.push({
+        cat,
+        label: cat.name,
+        showMega: true,
+      })
+    })
+  }
+
   const activeCategory = categories.find(c => c.id === activeCategoryId)
+
+  // All categories for mobile menu (use nav order if available)
+  const mobileCategories = navSettings && navSettings.items.length > 0
+    ? navSettings.items
+        .filter(item => item.visible)
+        .sort((a, b) => a.position - b.position)
+        .map(item => {
+          const cat = categories.find(c => c.id === item.category_id)
+          return cat ? { cat, label: item.label_sk || item.label_en || cat.name } : null
+        })
+        .filter(Boolean) as { cat: Category; label: string }[]
+    : categories.map(cat => ({ cat, label: cat.name }))
 
   return (
     <header className="sticky top-0 z-50 bg-white">
@@ -98,12 +165,10 @@ export default function Header() {
       {/* Main header */}
       <div className="border-b bg-white">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
-          {/* Mobile menu toggle */}
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-1">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
 
-          {/* Logo */}
           <Link href="/" className="flex-shrink-0 flex items-center gap-1">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm bg-[#1e3a5f]">P</div>
             <span className="text-xl font-extrabold text-[#1e3a5f]">PROFI</span>
@@ -111,7 +176,6 @@ export default function Header() {
             <span className="text-xs text-gray-400 ml-0.5">.sk</span>
           </Link>
 
-          {/* Search */}
           <form onSubmit={handleSearch} className="flex-1 max-w-xl hidden md:flex">
             <div className="flex w-full rounded-xl overflow-hidden border-2 border-gray-200 focus-within:border-[#c4956a] transition">
               <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hľadať produkt, značku..." className="flex-1 px-4 py-2.5 focus:outline-none text-sm" />
@@ -121,7 +185,6 @@ export default function Header() {
             </div>
           </form>
 
-          {/* Right actions */}
           <div className="flex items-center gap-4 ml-auto">
             <button className="hidden md:flex flex-col items-center text-gray-500 hover:text-red-500 transition p-2">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
@@ -137,7 +200,6 @@ export default function Header() {
               </Link>
             )}
 
-            {/* Cart */}
             <Link href="/cart" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition relative">
               <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" /></svg>
               {cartCount > 0 && (
@@ -151,11 +213,11 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Category navigation - MEGA MENU like profibuy.sk */}
+      {/* Category navigation - uses nav settings */}
       <nav className={`border-b bg-white hidden lg:block relative ${isCollapsed ? 'shadow-md' : ''}`}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center overflow-x-auto no-scrollbar">
-            {categories.slice(0, 10).map(cat => (
+            {navCategories.map(({ cat, label, showMega }) => (
               <Link
                 key={cat.id}
                 href={`/categories/${cat.slug}`}
@@ -164,17 +226,17 @@ export default function Header() {
                     ? 'text-[#c4956a] border-[#c4956a] bg-orange-50/50' 
                     : 'text-gray-700 border-transparent hover:text-[#c4956a] hover:bg-orange-50/30'
                 }`}
-                onMouseEnter={() => openMegaMenu(cat)}
+                onMouseEnter={() => showMega && openMegaMenu(cat)}
                 onMouseLeave={scheduleMegaClose}
               >
                 <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
                   {cat.image ? (
                     <img src={cat.image} alt="" className="w-full h-full object-contain" />
                   ) : (
-                    <span className="text-base">{getInitial(cat.name)}</span>
+                    <span className="text-base">{getInitial(label)}</span>
                   )}
                 </span>
-                <span>{cat.name}</span>
+                <span>{label}</span>
               </Link>
             ))}
           </div>
@@ -191,11 +253,7 @@ export default function Header() {
               <div className="grid grid-cols-4 gap-x-6 gap-y-4 max-h-[50vh] overflow-y-auto">
                 {activeCategory.children.map(subcat => (
                   <div key={subcat.id} className="py-2 border-b border-gray-100 last:border-0">
-                    {/* Subcategory header with image */}
-                    <Link 
-                      href={`/categories/${subcat.slug}`}
-                      className="flex items-center gap-3 mb-2 group"
-                    >
+                    <Link href={`/categories/${subcat.slug}`} className="flex items-center gap-3 mb-2 group">
                       <div className="w-11 h-11 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {subcat.image ? (
                           <img src={subcat.image} alt="" className="w-full h-full object-contain" />
@@ -210,7 +268,6 @@ export default function Header() {
                       </span>
                     </Link>
                     
-                    {/* Grandchildren - inline links with bullets */}
                     {subcat.children && subcat.children.length > 0 && (
                       <div className="flex flex-wrap items-center gap-0 pl-0 text-xs leading-relaxed">
                         {subcat.children.slice(0, 8).map((grandchild, i) => (
@@ -260,17 +317,21 @@ export default function Header() {
               </button>
             </div>
             <div className="overflow-y-auto h-[calc(100%-60px)]">
-              {categories.map(cat => (
+              {mobileCategories.map(({ cat, label }) => (
                 <Link
                   key={cat.id}
                   href={`/categories/${cat.slug}`}
                   className="flex items-center gap-3 px-4 py-3 border-b hover:bg-gray-50"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <span className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-sm">
-                    {getInitial(cat.name)}
+                  <span className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-sm overflow-hidden">
+                    {cat.image ? (
+                      <img src={cat.image} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      getInitial(label)
+                    )}
                   </span>
-                  <span className="font-medium text-gray-800">{cat.name}</span>
+                  <span className="font-medium text-gray-800">{label}</span>
                   {(cat.product_count || 0) > 0 && (
                     <span className="text-xs text-gray-400 ml-auto">{cat.product_count}</span>
                   )}

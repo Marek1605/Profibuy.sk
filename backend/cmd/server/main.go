@@ -225,6 +225,9 @@ func main() {
 			admin.GET("/navigation", handlers.GetNavigationSettings(db))
 			admin.POST("/navigation", handlers.SaveNavigationSettings(db))
 
+			// Password change
+			admin.POST("/change-password", handlers.ChangePassword(db))
+
 			// Pages / CMS management
 			admin.GET("/pages", handlers.ListAdminPages(db.Pool()))
 			admin.GET("/pages/:id", handlers.GetAdminPage(db.Pool()))

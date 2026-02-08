@@ -785,6 +785,65 @@ func SaveFilterSettings(db *database.Postgres) gin.HandlerFunc {
 	}
 }
 
+// ==================== CHANGE PASSWORD ====================
+
+// ChangePassword handles POST /api/admin/change-password
+func ChangePassword(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		userID, _ := c.Get("user_id")
+		if userID == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Not authenticated"})
+			return
+		}
+
+		var req struct {
+			CurrentPassword string `json:"current_password"`
+			NewPassword     string `json:"new_password"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		if len(req.NewPassword) < 8 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Heslo musí mať aspoň 8 znakov"})
+			return
+		}
+
+		// Get current password hash
+		var passwordHash string
+		err := db.Pool().QueryRow(ctx, "SELECT password_hash FROM users WHERE id = $1", userID).Scan(&passwordHash)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "User not found"})
+			return
+		}
+
+		// Verify current password
+		if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.CurrentPassword)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Nesprávne aktuálne heslo"})
+			return
+		}
+
+		// Hash new password
+		newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Chyba pri hashovaní"})
+			return
+		}
+
+		// Update
+		_, err = db.Pool().Exec(ctx, "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", string(newHash), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	}
+}
+
 // ==================== NAVIGATION SETTINGS ====================
 
 // GetNavigationSettings returns saved navigation configuration

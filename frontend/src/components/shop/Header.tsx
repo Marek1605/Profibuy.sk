@@ -90,7 +90,8 @@ export default function Header() {
         if (cat) navCategories.push({ cat, label: item.label_sk || item.label_en || cat.name, showMega: item.show_in_mega })
       })
   } else {
-    categories.slice(0, 12).forEach(cat => navCategories.push({ cat, label: cat.name, showMega: true }))
+    // Fallback - show first 12 published categories
+    categories.filter(c => c.published !== false).slice(0, 12).forEach(cat => navCategories.push({ cat, label: cat.name, showMega: true }))
   }
 
   const activeCategory = categories.find(c => c.id === activeCategoryId)

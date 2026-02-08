@@ -400,6 +400,7 @@ func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error
 			   COALESCE(description, ''), COALESCE(image, ''), COALESCE(position, 0),
 			   COALESCE(meta_title, ''), COALESCE(meta_description, ''), 
 			   COALESCE(product_count, 0), COALESCE(path::text, ''), 
+			   COALESCE(published, true),
 			   COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
 		FROM categories
 		ORDER BY position, name
@@ -413,14 +414,16 @@ func (p *Postgres) ListCategories(ctx context.Context) ([]models.Category, error
 	var categories []models.Category
 	for rows.Next() {
 		var cat models.Category
+		var published bool
 		err := rows.Scan(
 			&cat.ID, &cat.ParentID, &cat.Slug, &cat.Name, &cat.Description,
 			&cat.Image, &cat.Position, &cat.MetaTitle, &cat.MetaDesc,
-			&cat.ProductCount, &cat.Path, &cat.CreatedAt, &cat.UpdatedAt,
+			&cat.ProductCount, &cat.Path, &published, &cat.CreatedAt, &cat.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
+		cat.Published = &published
 		categories = append(categories, cat)
 	}
 	return categories, nil

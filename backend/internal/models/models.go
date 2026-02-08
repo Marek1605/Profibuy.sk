@@ -84,6 +84,7 @@ type Category struct {
 	MetaTitle   string     `json:"meta_title" db:"meta_title"`
 	MetaDesc    string     `json:"meta_description" db:"meta_description"`
 	ProductCount int       `json:"product_count" db:"product_count"`
+	Published   *bool      `json:"published" db:"published"`
 	Children    []Category `json:"children,omitempty" db:"-"`
 	Path        string     `json:"path" db:"path"` // ltree pre hierarchiu
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`

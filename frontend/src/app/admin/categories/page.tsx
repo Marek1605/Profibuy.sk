@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { getCategories } from '@/lib/api'
 import type { Category } from '@/types'
-import { Trash2, Loader2, RefreshCw, ChevronRight, ChevronDown, ImagePlus, Pencil, Save, X, Upload } from 'lucide-react'
+import { Trash2, Loader2, RefreshCw, ChevronRight, ChevronDown, ImagePlus, Pencil, Save, X, Upload, Eye, EyeOff } from 'lucide-react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
 
@@ -167,7 +167,7 @@ export default function AdminCategoriesPage() {
     return (
       <div key={cat.id}>
         <div 
-          className={`flex items-center justify-between py-2.5 px-4 hover:bg-gray-50 border-b transition-colors ${level === 0 ? 'bg-white' : 'bg-gray-50/50'}`} 
+          className={`flex items-center justify-between py-2.5 px-4 hover:bg-gray-50 border-b transition-colors ${level === 0 ? 'bg-white' : 'bg-gray-50/50'} ${cat.published === false ? 'opacity-40' : ''}`} 
           style={{ paddingLeft: `${level * 24 + 12}px` }}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -222,6 +222,26 @@ export default function AdminCategoriesPage() {
           {!isEditing && (
             <div className="flex items-center gap-1 flex-shrink-0 ml-2">
               <span className="text-gray-300 text-xs mr-2 hidden sm:inline">{cat.slug}</span>
+              {/* Published toggle */}
+              {depth === 0 && (
+                <button
+                  onClick={async () => {
+                    const newVal = cat.published === false ? true : false
+                    try {
+                      await fetch(`${API_BASE}/admin/categories/${cat.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ published: newVal })
+                      })
+                      load()
+                    } catch {}
+                  }}
+                  className={`p-1.5 rounded transition ${cat.published === false ? 'bg-red-50 text-red-400 hover:text-red-600' : 'hover:bg-green-50 text-green-500 hover:text-green-700'}`}
+                  title={cat.published === false ? 'Skrytá - klikni pre zobrazenie' : 'Viditeľná - klikni pre skrytie'}
+                >
+                  {cat.published === false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
               <button 
                 onClick={() => { setThumbnailModal(cat.id); setThumbnailUrl(cat.image || '') }}
                 className="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition" 

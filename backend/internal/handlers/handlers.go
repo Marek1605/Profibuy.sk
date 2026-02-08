@@ -510,6 +510,7 @@ func UpdateCategory(db *database.Postgres, redisCache *cache.Redis) gin.HandlerF
 			"name": "name", "slug": "slug", "description": "description",
 			"image": "image", "position": "position", "parent_id": "parent_id",
 			"meta_title": "meta_title", "meta_description": "meta_description",
+			"published": "published",
 		}
 
 		for jsonField, dbField := range fieldMap {

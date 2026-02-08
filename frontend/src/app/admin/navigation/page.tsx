@@ -166,6 +166,43 @@ export default function AdminNavigationPage() {
     }));
   }
 
+  function addAllCategories() {
+    const newItems = allCategories
+      .filter(c => !navSettings.items.find(i => i.category_id === c.id))
+      .map((cat, i) => ({
+        category_id: cat.id,
+        label_sk: '',
+        label_en: cat.name,
+        position: navSettings.items.length + i,
+        visible: true,
+        show_in_mega: true,
+        icon: '',
+      }));
+    setNavSettings(prev => ({
+      ...prev,
+      items: [...prev.items, ...newItems].map((item, i) => ({ ...item, position: i })),
+    }));
+  }
+
+  function setAllMega(value: boolean) {
+    setNavSettings(prev => ({
+      ...prev,
+      items: prev.items.map(item => ({ ...item, show_in_mega: value })),
+    }));
+  }
+
+  function setAllVisible(value: boolean) {
+    setNavSettings(prev => ({
+      ...prev,
+      items: prev.items.map(item => ({ ...item, visible: value })),
+    }));
+  }
+
+  function removeAllItems() {
+    if (!confirm('Naozaj odstrániť všetky kategórie z navigácie?')) return;
+    setNavSettings(prev => ({ ...prev, items: [] }));
+  }
+
   // Drag and drop
   function handleDragStart(index: number) {
     setDragIndex(index);
@@ -242,6 +279,34 @@ export default function AdminNavigationPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-800">
         <strong>Tip:</strong> Potiahni kategórie na zmenu poradia. Zadaj slovenský preklad — ak je prázdny, zobrazí sa anglický názov.
         Mega menu sa zobrazí po navedení myšou na kategóriu (ak má podkategórie).
+      </div>
+
+      {/* Bulk actions */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {availableCategories.length > 0 && (
+          <button onClick={addAllCategories} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition">
+            ➕ Pridať všetky ({availableCategories.length})
+          </button>
+        )}
+        {navSettings.items.length > 0 && (
+          <>
+            <button onClick={() => setAllMega(true)} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition">
+              🟣 Mega ON všetkým
+            </button>
+            <button onClick={() => setAllMega(false)} className="px-3 py-1.5 bg-gray-400 text-white rounded-lg text-xs font-medium hover:bg-gray-500 transition">
+              ⚪ Mega OFF všetkým
+            </button>
+            <button onClick={() => setAllVisible(true)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition">
+              👁 Zobraziť všetky
+            </button>
+            <button onClick={() => setAllVisible(false)} className="px-3 py-1.5 bg-gray-400 text-white rounded-lg text-xs font-medium hover:bg-gray-500 transition">
+              🚫 Skryť všetky
+            </button>
+            <button onClick={removeAllItems} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition ml-auto">
+              🗑 Odstrániť všetky
+            </button>
+          </>
+        )}
       </div>
 
       {/* Navigation items */}

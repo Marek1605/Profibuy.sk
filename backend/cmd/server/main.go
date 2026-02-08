@@ -96,6 +96,10 @@ func main() {
 
 			// Navigation settings (public - for header)
 			public.GET("/navigation", handlers.GetNavigationSettings(db))
+
+			// Pages / CMS
+			public.GET("/pages", handlers.ListPublicPages(db.Pool()))
+			public.GET("/pages/:slug", handlers.GetPage(db.Pool()))
 			
 			// Cart
 			public.POST("/cart", handlers.CreateCart(db))
@@ -219,6 +223,13 @@ func main() {
 			// Navigation management
 			admin.GET("/navigation", handlers.GetNavigationSettings(db))
 			admin.POST("/navigation", handlers.SaveNavigationSettings(db))
+
+			// Pages / CMS management
+			admin.GET("/pages", handlers.ListAdminPages(db.Pool()))
+			admin.GET("/pages/:id", handlers.GetAdminPage(db.Pool()))
+			admin.POST("/pages", handlers.CreatePage(db.Pool()))
+			admin.PUT("/pages/:id", handlers.UpdatePage(db.Pool()))
+			admin.DELETE("/pages/:id", handlers.DeletePage(db.Pool()))
 		}
 	}
 

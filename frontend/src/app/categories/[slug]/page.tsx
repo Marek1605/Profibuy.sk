@@ -153,7 +153,7 @@ function CategoryContent() {
           <div className="flex gap-8 items-start">
             {/* Desktop sidebar */}
             <div className="hidden lg:block w-[260px] flex-shrink-0">
-              <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+              <div className="sticky top-20 bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
                 <FilterSidebar categorySlug={params.slug as string} totalProducts={total} />
               </div>
             </div>

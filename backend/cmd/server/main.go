@@ -211,7 +211,7 @@ func main() {
 			admin.POST("/filter-settings", handlers.SaveFilterSettings(db))
 
 			// Export feed management
-			// admin.POST("/export/regenerate", handlers.RegenerateHeurekaXML(db, cfg)) // TODO: implement
+			admin.POST("/export/regenerate", handlers.RegenerateHeurekaXML(db, cfg))
 		}
 	}
 
@@ -220,7 +220,7 @@ func main() {
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 5 * time.Minute,
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

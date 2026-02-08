@@ -1,6 +1,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -740,4 +741,14 @@ func cleanDescription(desc string) string {
 	desc = strings.TrimSpace(desc)
 
 	return desc
+}
+
+// GenerateXMLBytes generates the complete XML feed and returns it as bytes
+func (e *HeurekaExporter) GenerateXMLBytes(ctx context.Context) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.Grow(50 * 1024 * 1024) // Pre-allocate ~50MB
+	if err := e.WriteXML(ctx, &buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

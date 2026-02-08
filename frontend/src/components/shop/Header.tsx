@@ -37,6 +37,7 @@ export default function Header() {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const closeTimeout = useRef<NodeJS.Timeout | null>(null)
   const moreTimeout = useRef<NodeJS.Timeout | null>(null)
   const getItemCount = useCartStore(s => s.getItemCount)
@@ -49,6 +50,7 @@ export default function Header() {
   const megamenuEnabled = navSettings ? navSettings.megamenu_enabled !== false : true
 
   useEffect(() => {
+    setMounted(true)
     async function load() {
       try {
         const cats = await getCategories()
@@ -159,8 +161,8 @@ export default function Header() {
               )}
               <Link href="/cart" className="flex items-center gap-1.5 px-2 py-1 text-gray-700 hover:text-blue-600 relative">
                 <svg className={`${collapsed ? 'w-5 h-5' : 'w-6 h-6'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" /></svg>
-                <span className="text-sm font-semibold">{getTotal().toFixed(2)} €</span>
-                {cartCount > 0 && <span className="absolute -top-1 left-3 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
+                {mounted && <span className="text-sm font-semibold">{getTotal().toFixed(2)} €</span>}
+                {mounted && cartCount > 0 && <span className="absolute -top-1 left-3 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
               </Link>
             </div>
           </div>
@@ -170,8 +172,8 @@ export default function Header() {
       {/* Categories bar */}
       <div className="hidden lg:block border-b relative z-50">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-end overflow-x-auto no-scrollbar">
-            {visibleCategories.map(({ cat, label, showMega }) => (
+          <div className="flex items-end overflow-x-auto no-scrollbar" style={{ minHeight: '90px' }}>
+            {mounted && visibleCategories.map(({ cat, label, showMega }) => (
               <Link
                 key={cat.id}
                 href={`/categories/${cat.slug}`}
@@ -191,7 +193,7 @@ export default function Header() {
             ))}
 
             {/* "Ďalšie" hamburger with dropdown - like profibuy.sk */}
-            {overflowCategories.length > 0 && (
+            {mounted && overflowCategories.length > 0 && (
               <div
                 className="relative flex-shrink-0"
                 onMouseEnter={() => { if (moreTimeout.current) clearTimeout(moreTimeout.current); setMoreMenuOpen(true) }}

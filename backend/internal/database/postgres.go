@@ -709,7 +709,7 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 	// Build category condition
 	catWhere := "WHERE p.status = 'active'"
 	if categoryID != nil {
-		catWhere += " AND (p.category_id = $1 OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $1)))"
+		catWhere += " AND (p.category_id = $1 OR p.category_id IN (WITH RECURSIVE cat_tree AS (SELECT id FROM categories WHERE parent_id = $1 UNION ALL SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id) SELECT id FROM cat_tree))"
 		args = append(args, *categoryID)
 	}
 
@@ -762,7 +762,7 @@ func (p *Postgres) GetFilterOptions(ctx context.Context, categoryID *uuid.UUID) 
 			AND attr->>'value' != ''
 	`
 	if categoryID != nil {
-		attrQuery += ` AND (p.category_id = $1 OR p.category_id IN (SELECT id FROM categories WHERE path <@ (SELECT path FROM categories WHERE id = $1)))`
+		attrQuery += ` AND (p.category_id = $1 OR p.category_id IN (WITH RECURSIVE cat_tree AS (SELECT id FROM categories WHERE parent_id = $1 UNION ALL SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id) SELECT id FROM cat_tree))`
 		attrArgs = append(attrArgs, *categoryID)
 	}
 	attrQuery += `

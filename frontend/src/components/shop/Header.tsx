@@ -111,7 +111,7 @@ export default function Header() {
   const collapsed = isScrolled && stickyCategories
 
   return (
-    <header className={`bg-white z-50 ${stickyHeader || stickyCategories ? 'sticky top-0' : ''}`}>
+    <header className={`bg-white z-50 ${stickyHeader || stickyCategories ? 'sticky top-0' : 'relative'}`}>
       {/* Top nav - hide on scroll */}
       {!collapsed && (
         <div className="border-b">
@@ -168,7 +168,7 @@ export default function Header() {
       )}
 
       {/* Categories bar */}
-      <div className="hidden lg:block border-b relative">
+      <div className="hidden lg:block border-b relative z-50">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-end overflow-x-auto no-scrollbar">
             {visibleCategories.map(({ cat, label, showMega }) => (

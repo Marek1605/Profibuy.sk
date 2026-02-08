@@ -44,9 +44,9 @@ export default function Header() {
   const user = useAuthStore(s => s.user)
   const cartCount = getItemCount()
 
-  const stickyHeader = navSettings?.sticky_header !== false
-  const stickyCategories = navSettings?.sticky_categories !== false
-  const megamenuEnabled = navSettings?.megamenu_enabled !== false
+  const stickyHeader = navSettings ? navSettings.sticky_header : false
+  const stickyCategories = navSettings ? navSettings.sticky_categories : false
+  const megamenuEnabled = navSettings ? navSettings.megamenu_enabled !== false : true
 
   useEffect(() => {
     async function load() {
@@ -175,20 +175,18 @@ export default function Header() {
               <Link
                 key={cat.id}
                 href={`/categories/${cat.slug}`}
-                className={`flex items-center gap-0 text-center group flex-shrink-0 border-b-2 transition-all ${
+                className={`flex flex-col items-center px-3 py-3 min-w-[105px] max-w-[125px] text-center group flex-shrink-0 border-b-2 transition-all ${
                   activeCategoryId === cat.id ? 'border-blue-500' : 'border-transparent hover:border-blue-300'
-                } ${collapsed ? 'flex-row gap-1.5 px-3 py-1.5' : 'flex-col px-3 py-3 min-w-[105px] max-w-[125px]'}`}
+                }`}
                 onMouseEnter={() => megamenuEnabled && showMega && openMegaMenu(cat)}
                 onMouseLeave={scheduleMegaClose}
               >
-                <div className={`flex items-center justify-center transition-all ${collapsed ? 'w-7 h-7' : 'w-14 h-14 mb-1.5'}`}>
-                  {cat.image ? <img src={cat.image} alt={label} className="max-w-full max-h-full object-contain" /> : <span className={`text-gray-300 ${collapsed ? 'text-xs' : 'text-2xl'}`}>{label.charAt(0)}</span>}
+                <div className="w-14 h-14 flex items-center justify-center mb-1.5">
+                  {cat.image ? <img src={cat.image} alt={label} className="max-w-full max-h-full object-contain" /> : <span className="text-2xl text-gray-300">{label.charAt(0)}</span>}
                 </div>
-                <span className={`font-semibold leading-tight ${
+                <span className={`text-[11px] font-semibold leading-tight line-clamp-2 ${
                   activeCategoryId === cat.id ? 'text-blue-600' : 'text-gray-700 group-hover:text-blue-600'
-                } ${collapsed ? 'text-[11px] whitespace-nowrap' : 'text-[11px]'}`}>
-                  {collapsed ? label.split(' ').slice(0, 2).join(' ') : label}
-                </span>
+                }`}>{label}</span>
               </Link>
             ))}
 
@@ -200,12 +198,10 @@ export default function Header() {
                 onMouseLeave={() => { moreTimeout.current = setTimeout(() => setMoreMenuOpen(false), 200) }}
               >
                 <button
-                  className={`flex items-center justify-center border-b-2 border-transparent hover:border-blue-300 transition-all ${
-                    collapsed ? 'px-3 py-1.5' : 'px-4 py-3 min-w-[70px]'
-                  }`}
+                  className="flex flex-col items-center px-4 py-3 min-w-[70px] border-b-2 border-transparent hover:border-blue-300 transition-all"
                 >
-                  <div className={`flex items-center justify-center ${collapsed ? 'w-7 h-7' : 'w-14 h-14 mb-1.5'}`}>
-                    <svg className={`text-gray-400 ${collapsed ? 'w-5 h-5' : 'w-8 h-8'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-14 h-14 flex items-center justify-center mb-1.5">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                   </div>

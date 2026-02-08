@@ -170,7 +170,10 @@ export default function Header() {
       )}
 
       {/* Categories bar */}
-      <div className="hidden lg:block border-b relative z-50">
+      <div 
+        className="hidden lg:block border-b relative z-50"
+        onMouseLeave={() => { scheduleMegaClose(); if (moreTimeout.current) clearTimeout(moreTimeout.current); setTimeout(() => setMoreMenuOpen(false), 200); }}
+      >
         <div className="max-w-7xl mx-auto">
           <div className="flex items-end overflow-x-auto no-scrollbar" style={{ minHeight: '90px' }}>
             {mounted && visibleCategories.map(({ cat, label, showMega }) => (
@@ -180,8 +183,7 @@ export default function Header() {
                 className={`flex flex-col items-center px-3 py-3 min-w-[105px] max-w-[125px] text-center group flex-shrink-0 border-b-2 transition-all ${
                   activeCategoryId === cat.id ? 'border-blue-500' : 'border-transparent hover:border-blue-300'
                 }`}
-                onMouseEnter={() => megamenuEnabled && showMega && openMegaMenu(cat)}
-                onMouseLeave={scheduleMegaClose}
+                onMouseEnter={() => megamenuEnabled && openMegaMenu(cat)}
               >
                 <div className="w-14 h-14 flex items-center justify-center mb-1.5">
                   {cat.image ? <img src={cat.image} alt={label} className="max-w-full max-h-full object-contain" /> : <span className="text-2xl text-gray-300">{label.charAt(0)}</span>}
@@ -234,7 +236,7 @@ export default function Header() {
 
         {/* Mega menu */}
         {megamenuEnabled && megaMenuOpen && activeCategory && activeCategory.children && activeCategory.children.length > 0 && (
-          <div className="absolute left-0 right-0 top-full bg-white border-t-2 border-blue-500 shadow-2xl z-50" onMouseEnter={cancelMegaClose} onMouseLeave={scheduleMegaClose} style={{ animation: 'fadeIn 0.15s ease-out' }}>
+          <div className="absolute left-0 right-0 top-full bg-white border-t-2 border-blue-500 shadow-2xl z-50" style={{ animation: 'fadeIn 0.15s ease-out' }}>
             <div className="max-w-7xl mx-auto px-6 py-6">
               <div className="grid grid-cols-4 gap-x-8 gap-y-5 max-h-[60vh] overflow-y-auto">
                 {activeCategory.children.map(sub => (

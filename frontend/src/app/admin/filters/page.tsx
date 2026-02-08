@@ -1,8 +1,17 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAuthStore } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 interface AttributeStat {
   name: string;
@@ -46,21 +55,19 @@ export default function AdminFiltersPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const statsRes = await fetch(`${API_URL}/api/admin/attributes/stats`, {
-        credentials: 'include',
+      const statsRes = await fetch(`${API_BASE}/admin/attributes/stats`, {
+        headers: authHeaders(),
       });
       const statsData = await statsRes.json();
       if (statsData.success && statsData.data) {
-        setAttributes(
-          statsData.data.sort(
-            (a: AttributeStat, b: AttributeStat) =>
-              b.product_count - a.product_count
-          )
+        const sorted = [...statsData.data].sort(
+          (a: AttributeStat, b: AttributeStat) => b.product_count - a.product_count
         );
+        setAttributes(sorted);
       }
 
-      const settingsRes = await fetch(`${API_URL}/api/admin/filter-settings`, {
-        credentials: 'include',
+      const settingsRes = await fetch(`${API_BASE}/admin/filter-settings`, {
+        headers: authHeaders(),
       });
       const settingsData = await settingsRes.json();
       if (settingsData.success && settingsData.data?.enabled) {
@@ -83,15 +90,9 @@ export default function AdminFiltersPage() {
     setFilterSettings((prev) => {
       const next = { ...prev, enabled: { ...prev.enabled } };
       if (!next.enabled[attrName]) {
-        next.enabled[attrName] = {
-          enabled: true,
-          max_values: prev.global_max_values,
-        };
+        next.enabled[attrName] = { enabled: true, max_values: prev.global_max_values };
       } else {
-        next.enabled[attrName] = {
-          ...next.enabled[attrName],
-          enabled: !next.enabled[attrName].enabled,
-        };
+        next.enabled[attrName] = { ...next.enabled[attrName], enabled: !next.enabled[attrName].enabled };
       }
       return next;
     });
@@ -114,23 +115,16 @@ export default function AdminFiltersPage() {
   }
 
   function getMaxValues(attrName: string) {
-    return (
-      filterSettings.enabled[attrName]?.max_values ||
-      filterSettings.global_max_values
-    );
+    return filterSettings.enabled[attrName]?.max_values || filterSettings.global_max_values;
   }
 
   const filteredAttributes = useMemo(() => {
     if (!searchQuery) return attributes;
-    return attributes.filter((a) =>
-      a.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return attributes.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [attributes, searchQuery]);
 
   const displayedAttributes = useMemo(() => {
-    return displayLimit > 0
-      ? filteredAttributes.slice(0, displayLimit)
-      : filteredAttributes;
+    return displayLimit > 0 ? filteredAttributes.slice(0, displayLimit) : filteredAttributes;
   }, [filteredAttributes, displayLimit]);
 
   const enabledCount = useMemo(() => {
@@ -141,14 +135,7 @@ export default function AdminFiltersPage() {
     setFilterSettings((prev) => {
       const next = { ...prev, enabled: { ...prev.enabled } };
       displayedAttributes.forEach((attr) => {
-        if (!next.enabled[attr.name]) {
-          next.enabled[attr.name] = {
-            enabled: true,
-            max_values: prev.global_max_values,
-          };
-        } else {
-          next.enabled[attr.name] = { ...next.enabled[attr.name], enabled: true };
-        }
+        next.enabled[attr.name] = { enabled: true, max_values: next.enabled[attr.name]?.max_values || prev.global_max_values };
       });
       return next;
     });
@@ -159,10 +146,7 @@ export default function AdminFiltersPage() {
       const next = { ...prev, enabled: { ...prev.enabled } };
       displayedAttributes.forEach((attr) => {
         if (next.enabled[attr.name]) {
-          next.enabled[attr.name] = {
-            ...next.enabled[attr.name],
-            enabled: false,
-          };
+          next.enabled[attr.name] = { ...next.enabled[attr.name], enabled: false };
         }
       });
       return next;
@@ -173,10 +157,7 @@ export default function AdminFiltersPage() {
     setFilterSettings((prev) => {
       const next = { ...prev, enabled: { ...prev.enabled } };
       Object.keys(next.enabled).forEach((key) => {
-        next.enabled[key] = {
-          ...next.enabled[key],
-          max_values: prev.global_max_values,
-        };
+        next.enabled[key] = { ...next.enabled[key], max_values: prev.global_max_values };
       });
       return next;
     });
@@ -187,10 +168,9 @@ export default function AdminFiltersPage() {
     setMessage('');
     const toSave = { ...filterSettings, display_limit: displayLimit };
     try {
-      const res = await fetch(`${API_URL}/api/admin/filter-settings`, {
+      const res = await fetch(`${API_BASE}/admin/filter-settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: authHeaders(),
         body: JSON.stringify(toSave),
       });
       const result = await res.json();
@@ -205,80 +185,38 @@ export default function AdminFiltersPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            border: '3px solid #e2e8f0',
-            borderTopColor: '#c4956a',
-            borderRadius: '50%',
-            margin: '0 auto 16px',
-            animation: 'spin 1s linear infinite',
-          }}
-        />
-        <p>Načítavam atribúty...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+        <div className="w-8 h-8 border-3 border-gray-200 border-t-amber-600 rounded-full animate-spin mb-4" />
+        <p className="text-sm">Načítavam atribúty...</p>
       </div>
     );
   }
 
   if (attributes.length === 0) {
     return (
-      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
-        <h2 style={{ margin: '0 0 8px', color: '#334155' }}>Žiadne atribúty</h2>
-        <p>Najprv importujte produkty cez dodávateľa</p>
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+        <div className="text-5xl mb-4">📦</div>
+        <h2 className="text-lg font-semibold text-gray-600 mb-1">Žiadne atribúty</h2>
+        <p className="text-sm">Najprv importujte produkty cez dodávateľa</p>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100 }}>
+    <div className="max-w-[1100px] p-6">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: 24,
-          flexWrap: 'wrap',
-          gap: 16,
-        }}
-      >
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#1e293b', margin: '0 0 4px' }}>
-            🔍 Nastavenie filtrov
-          </h1>
-          <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>
-            {attributes.length} atribútov • {enabledCount} aktívnych
-          </p>
+          <h1 className="text-2xl font-bold text-gray-800">🔍 Nastavenie filtrov</h1>
+          <p className="text-sm text-gray-500 mt-1">{attributes.length} atribútov • {enabledCount} aktívnych</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {message === 'success' && (
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#059669' }}>
-              ✅ Uložené
-            </span>
-          )}
-          {message === 'error' && (
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#dc2626' }}>
-              ❌ Chyba pri ukladaní
-            </span>
-          )}
+        <div className="flex items-center gap-3">
+          {message === 'success' && <span className="text-sm font-medium text-green-600">✅ Uložené</span>}
+          {message === 'error' && <span className="text-sm font-medium text-red-600">❌ Chyba</span>}
           <button
             onClick={saveSettings}
             disabled={saving}
-            style={{
-              padding: '10px 18px',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: saving ? 'wait' : 'pointer',
-              background: '#c4956a',
-              color: 'white',
-              opacity: saving ? 0.7 : 1,
-            }}
+            className="px-5 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-60 transition"
           >
             {saving ? '⏳ Ukladám...' : '💾 Uložiť'}
           </button>
@@ -286,377 +224,111 @@ export default function AdminFiltersPage() {
       </div>
 
       {/* Global Settings */}
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          padding: '20px 24px',
-          marginBottom: 20,
-        }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 16px', color: '#334155' }}>
-          📐 Všeobecné nastavenia
-        </h3>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ fontSize: 14, color: '#475569', whiteSpace: 'nowrap' }}>
-              Zobraziť atribútov:
-            </label>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">📐 Všeobecné nastavenia</h3>
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 whitespace-nowrap">Zobraziť atribútov:</label>
             <select
               value={displayLimit}
               onChange={(e) => setDisplayLimit(parseInt(e.target.value))}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                fontSize: 14,
-                background: 'white',
-                cursor: 'pointer',
-                minWidth: 120,
-              }}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white min-w-[120px]"
             >
               {limitOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ fontSize: 14, color: '#475569', whiteSpace: 'nowrap' }}>
-              Max. hodnôt na filter:
-            </label>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 whitespace-nowrap">Max. hodnôt na filter:</label>
             <input
               type="number"
               value={filterSettings.global_max_values}
-              onChange={(e) =>
-                setFilterSettings((prev) => ({
-                  ...prev,
-                  global_max_values: parseInt(e.target.value) || 10,
-                }))
-              }
-              min={1}
-              max={100}
-              style={{
-                width: 65,
-                padding: 8,
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                textAlign: 'center',
-              }}
+              onChange={(e) => setFilterSettings((prev) => ({ ...prev, global_max_values: parseInt(e.target.value) || 10 }))}
+              min={1} max={100}
+              className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm text-center"
             />
-            <button
-              onClick={applyGlobalMaxToAll}
-              style={{
-                padding: '8px 14px',
-                fontSize: 13,
-                background: '#f1f5f9',
-                color: '#475569',
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={applyGlobalMaxToAll} className="px-3 py-2 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition">
               Aplikovať na všetky
             </button>
           </div>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              cursor: 'pointer',
-              fontSize: 14,
-              color: '#475569',
-            }}
-          >
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input
               type="checkbox"
               checked={filterSettings.show_counts}
-              onChange={(e) =>
-                setFilterSettings((prev) => ({
-                  ...prev,
-                  show_counts: e.target.checked,
-                }))
-              }
-              style={{ width: 18, height: 18, accentColor: '#c4956a' }}
+              onChange={(e) => setFilterSettings((prev) => ({ ...prev, show_counts: e.target.checked }))}
+              className="w-4 h-4 accent-amber-600"
             />
-            <span>Zobrazovať počty</span>
+            Zobrazovať počty
           </label>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <input
           type="text"
           placeholder="🔎 Hľadať atribút..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            border: '1px solid #e2e8f0',
-            borderRadius: 10,
-            fontSize: 14,
-            width: 220,
-            background: 'white',
-          }}
+          className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm w-56 bg-white focus:outline-none focus:border-amber-400"
         />
-        <div style={{ fontSize: 13, color: '#64748b' }}>
+        <span className="text-xs text-gray-500">
           Zobrazených: {displayedAttributes.length} z {filteredAttributes.length}
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={selectAllVisible}
-            style={{
-              padding: '8px 14px',
-              fontSize: 13,
-              background: '#f1f5f9',
-              color: '#475569',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
-          >
+        </span>
+        <div className="flex gap-2">
+          <button onClick={selectAllVisible} className="px-3 py-2 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition">
             ✓ Vybrať zobrazené
           </button>
-          <button
-            onClick={deselectAllVisible}
-            style={{
-              padding: '8px 14px',
-              fontSize: 13,
-              background: 'white',
-              color: '#475569',
-              border: '1px solid #e2e8f0',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
-          >
+          <button onClick={deselectAllVisible} className="px-3 py-2 text-xs bg-white text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
             ✗ Zrušiť zobrazené
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: 12,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          overflow: 'hidden',
-        }}
-      >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <table className="w-full">
           <thead>
-            <tr>
-              <th
-                style={{
-                  textAlign: 'center',
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: '#64748b',
-                  borderBottom: '1px solid #e2e8f0',
-                  width: 80,
-                }}
-              >
-                Aktívny
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: '#64748b',
-                  borderBottom: '1px solid #e2e8f0',
-                  minWidth: 200,
-                }}
-              >
-                Názov atribútu
-              </th>
-              <th
-                style={{
-                  textAlign: 'center',
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: '#64748b',
-                  borderBottom: '1px solid #e2e8f0',
-                  width: 100,
-                }}
-              >
-                Produktov
-              </th>
-              <th
-                style={{
-                  textAlign: 'center',
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: '#64748b',
-                  borderBottom: '1px solid #e2e8f0',
-                  width: 100,
-                }}
-              >
-                Hodnôt
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: '#64748b',
-                  borderBottom: '1px solid #e2e8f0',
-                  width: 130,
-                }}
-              >
-                Max. na výber
-              </th>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="w-20 px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Aktívny</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase min-w-[200px]">Názov atribútu</th>
+              <th className="w-24 px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Produktov</th>
+              <th className="w-24 px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Hodnôt</th>
+              <th className="w-32 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Max.</th>
             </tr>
           </thead>
           <tbody>
             {displayedAttributes.map((attr, index) => {
               const enabled = isEnabled(attr.name);
               return (
-                <tr
-                  key={attr.name}
-                  style={{
-                    background: enabled ? '#fefce8' : 'transparent',
-                    borderBottom: '1px solid #f1f5f9',
-                  }}
-                >
-                  <td style={{ textAlign: 'center', padding: '12px 16px' }}>
-                    <label
-                      style={{
-                        position: 'relative',
-                        display: 'inline-block',
-                        width: 44,
-                        height: 24,
-                        cursor: 'pointer',
-                      }}
+                <tr key={attr.name} className={`border-b border-gray-50 hover:bg-gray-50 transition ${enabled ? 'bg-amber-50 hover:bg-amber-100/60' : ''}`}>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => toggleAttribute(attr.name)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={() => toggleAttribute(attr.name)}
-                        style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
-                      />
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          backgroundColor: enabled ? '#c4956a' : '#e2e8f0',
-                          transition: '.2s',
-                          borderRadius: 24,
-                        }}
-                      >
-                        <span
-                          style={{
-                            position: 'absolute',
-                            content: '""',
-                            height: 18,
-                            width: 18,
-                            left: enabled ? 23 : 3,
-                            bottom: 3,
-                            backgroundColor: 'white',
-                            transition: '.2s',
-                            borderRadius: '50%',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                          }}
-                        />
-                      </span>
-                    </label>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#475569' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: '#9ca3af',
-                          background: '#f1f5f9',
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                          minWidth: 32,
-                          textAlign: 'center',
-                        }}
-                      >
-                        #{index + 1}
-                      </span>
-                      <strong style={{ color: '#1e293b', fontWeight: 500 }}>
-                        {attr.name}
-                      </strong>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded min-w-[28px] text-center">#{index + 1}</span>
+                      <span className="text-sm font-medium text-gray-800">{attr.name}</span>
                     </div>
                   </td>
-                  <td style={{ textAlign: 'center', padding: '12px 16px' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        background: '#dbeafe',
-                        color: '#1e40af',
-                        padding: '4px 10px',
-                        borderRadius: 12,
-                        fontSize: 13,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {attr.product_count}
-                    </span>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-block bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium">{attr.product_count}</span>
                   </td>
-                  <td
-                    style={{
-                      textAlign: 'center',
-                      padding: '12px 16px',
-                      fontSize: 14,
-                      color: '#475569',
-                    }}
-                  >
-                    {attr.total_values}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
+                  <td className="px-4 py-3 text-center text-sm text-gray-500">{attr.total_values}</td>
+                  <td className="px-4 py-3">
                     <input
                       type="number"
                       value={getMaxValues(attr.name)}
-                      onChange={(e) =>
-                        updateMaxValues(attr.name, parseInt(e.target.value) || 10)
-                      }
-                      min={1}
-                      max={100}
+                      onChange={(e) => updateMaxValues(attr.name, parseInt(e.target.value) || 10)}
+                      min={1} max={100}
                       disabled={!enabled}
-                      style={{
-                        width: 65,
-                        padding: 8,
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        textAlign: 'center',
-                        background: enabled ? 'white' : '#f8fafc',
-                        color: enabled ? '#1e293b' : '#94a3b8',
-                        cursor: enabled ? 'text' : 'not-allowed',
-                      }}
+                      className={`w-16 px-2 py-1.5 border rounded-lg text-sm text-center transition ${enabled ? 'border-gray-200 bg-white text-gray-800' : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'}`}
                     />
                   </td>
                 </tr>
@@ -666,30 +338,14 @@ export default function AdminFiltersPage() {
         </table>
 
         {displayedAttributes.length === 0 && searchQuery && (
-          <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
-            Žiadne atribúty pre &quot;{searchQuery}&quot;
-          </div>
+          <div className="text-center py-10 text-gray-400 text-sm">Žiadne atribúty pre &quot;{searchQuery}&quot;</div>
         )}
 
         {displayLimit > 0 && filteredAttributes.length > displayLimit && (
-          <div
-            style={{
-              padding: 16,
-              textAlign: 'center',
-              borderTop: '1px solid #f1f5f9',
-            }}
-          >
+          <div className="text-center py-4 border-t border-gray-100">
             <button
               onClick={() => setDisplayLimit(0)}
-              style={{
-                padding: '8px 14px',
-                fontSize: 13,
-                background: '#f1f5f9',
-                color: '#475569',
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
+              className="px-4 py-2 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
             >
               Zobraziť všetkých {filteredAttributes.length} atribútov
             </button>

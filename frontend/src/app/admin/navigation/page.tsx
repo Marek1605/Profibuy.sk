@@ -37,6 +37,8 @@ interface NavSettings {
   max_visible: number;
   show_product_counts: boolean;
   megamenu_enabled: boolean;
+  sticky_header: boolean;
+  sticky_categories: boolean;
 }
 
 export default function AdminNavigationPage() {
@@ -46,6 +48,8 @@ export default function AdminNavigationPage() {
     max_visible: 10,
     show_product_counts: false,
     megamenu_enabled: true,
+    sticky_header: true,
+    sticky_categories: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -277,22 +281,51 @@ export default function AdminNavigationPage() {
         </div>
       </div>
 
-      {/* Megamenu global toggle */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-5 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-gray-800">Megamenu</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Zobraziť veľké menu s podkategóriami a obrázkami pri navedení myšou</p>
+      {/* Display settings */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-5 space-y-4">
+        <h3 className="text-sm font-bold text-gray-800 mb-3">⚙️ Nastavenia zobrazenia</h3>
+        
+        {/* Megamenu */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Megamenu</p>
+            <p className="text-xs text-gray-500">Veľké menu s podkategóriami a obrázkami pri navedení myšou</p>
+          </div>
+          <button
+            onClick={() => setNavSettings(prev => ({ ...prev, megamenu_enabled: !prev.megamenu_enabled }))}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${navSettings.megamenu_enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${navSettings.megamenu_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
-        <button
-          onClick={() => setNavSettings(prev => ({ ...prev, megamenu_enabled: !prev.megamenu_enabled }))}
-          className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-            navSettings.megamenu_enabled ? 'bg-blue-600' : 'bg-gray-300'
-          }`}
-        >
-          <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${
-            navSettings.megamenu_enabled ? 'translate-x-7' : 'translate-x-1'
-          }`} />
-        </button>
+
+        {/* Sticky header */}
+        <div className="flex items-center justify-between border-t pt-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Prilepený header</p>
+            <p className="text-xs text-gray-500">Logo, vyhľadávanie a košík zostanú hore pri scrollovaní</p>
+          </div>
+          <button
+            onClick={() => setNavSettings(prev => ({ ...prev, sticky_header: !prev.sticky_header }))}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${navSettings.sticky_header ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${navSettings.sticky_header ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
+        {/* Sticky categories */}
+        <div className="flex items-center justify-between border-t pt-4">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Prilepené kategórie</p>
+            <p className="text-xs text-gray-500">Kategórie sa zmenšia a zostanú prilepené pri scrollovaní</p>
+          </div>
+          <button
+            onClick={() => setNavSettings(prev => ({ ...prev, sticky_categories: !prev.sticky_categories }))}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${navSettings.sticky_categories ? 'bg-blue-600' : 'bg-gray-300'}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${navSettings.sticky_categories ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
       </div>
 
       {/* Info */}

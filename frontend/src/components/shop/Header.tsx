@@ -96,7 +96,7 @@ export default function Header() {
   const activeCategory = categories.find(c => c.id === activeCategoryId)
 
   return (
-    <header className="bg-white">
+    <header className="sticky top-0 z-50 bg-white">
       {/* Top bar - links */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
@@ -162,32 +162,32 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Category bar - large circular icons like profibuy.sk */}
+      {/* Category bar - scrollable icons like profibuy.sk */}
       <div className="hidden lg:block border-b bg-gray-50/50 relative">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-stretch justify-center gap-0 overflow-x-auto no-scrollbar">
+        <div className="max-w-7xl mx-auto px-2">
+          <div className="flex items-stretch overflow-x-auto no-scrollbar">
             {navCategories.map(({ cat, label, showMega }) => (
               <Link
                 key={cat.id}
                 href={`/categories/${cat.slug}`}
-                className={`flex flex-col items-center gap-1.5 px-4 py-4 min-w-[100px] text-center transition group ${
+                className={`flex flex-col items-center gap-2 px-3 py-3 min-w-[90px] max-w-[110px] text-center transition group flex-shrink-0 ${
                   activeCategoryId === cat.id ? 'bg-blue-50' : 'hover:bg-gray-100'
                 }`}
                 onMouseEnter={() => megamenuEnabled && showMega && openMegaMenu(cat)}
                 onMouseLeave={scheduleMegaClose}
               >
                 {/* Circular icon with image */}
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center overflow-hidden border-2 transition ${
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2 transition flex-shrink-0 ${
                   activeCategoryId === cat.id ? 'border-blue-500 shadow-md' : 'border-gray-200 group-hover:border-blue-300'
                 } bg-white`}>
                   {cat.image ? (
-                    <img src={cat.image} alt={label} className="w-12 h-12 object-contain" />
+                    <img src={cat.image} alt={label} className="w-10 h-10 object-contain" />
                   ) : (
-                    <span className="text-2xl font-bold text-gray-300">{label.charAt(0)}</span>
+                    <span className="text-xl font-bold text-gray-300">{label.charAt(0)}</span>
                   )}
                 </div>
                 {/* Label */}
-                <span className={`text-xs font-semibold leading-tight max-w-[90px] line-clamp-2 ${
+                <span className={`text-[11px] font-medium leading-tight w-full ${
                   activeCategoryId === cat.id ? 'text-blue-600' : 'text-gray-700 group-hover:text-blue-600'
                 }`}>
                   {label}

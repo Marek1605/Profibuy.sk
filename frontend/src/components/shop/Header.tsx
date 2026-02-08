@@ -25,6 +25,8 @@ interface NavSettings {
   sticky_categories: boolean
 }
 
+const MAX_VISIBLE = 10
+
 export default function Header() {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -33,8 +35,10 @@ export default function Header() {
   const [navSettings, setNavSettings] = useState<NavSettings | null>(null)
   const [megaMenuOpen, setMegaMenuOpen] = useState(false)
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const closeTimeout = useRef<NodeJS.Timeout | null>(null)
+  const moreTimeout = useRef<NodeJS.Timeout | null>(null)
   const getItemCount = useCartStore(s => s.getItemCount)
   const getTotal = useCartStore(s => s.getTotal)
   const user = useAuthStore(s => s.user)
@@ -56,9 +60,7 @@ export default function Header() {
             setNavSettings(navData.data)
           }
         } catch (e) {}
-      } catch (e) {
-        console.error('Failed to load categories:', e)
-      }
+      } catch (e) {}
     }
     load()
 
@@ -88,6 +90,7 @@ export default function Header() {
     if (closeTimeout.current) { clearTimeout(closeTimeout.current); closeTimeout.current = null }
   }
 
+  // Build nav categories
   const navCategories: { cat: Category; label: string; showMega: boolean }[] = []
 
   if (navSettings && navSettings.items.length > 0) {
@@ -99,15 +102,17 @@ export default function Header() {
         if (cat) navCategories.push({ cat, label: item.label_sk || item.label_en || cat.name, showMega: item.show_in_mega })
       })
   } else {
-    categories.filter(c => c.published !== false).slice(0, 14).forEach(cat => navCategories.push({ cat, label: cat.name, showMega: true }))
+    categories.filter(c => c.published !== false).forEach(cat => navCategories.push({ cat, label: cat.name, showMega: true }))
   }
 
+  const visibleCategories = navCategories.slice(0, MAX_VISIBLE)
+  const overflowCategories = navCategories.slice(MAX_VISIBLE)
   const activeCategory = categories.find(c => c.id === activeCategoryId)
   const collapsed = isScrolled && stickyCategories
 
   return (
     <header className={`bg-white z-50 ${stickyHeader || stickyCategories ? 'sticky top-0' : ''}`}>
-      {/* Top nav - hide on scroll when sticky */}
+      {/* Top nav - hide on scroll */}
       {!collapsed && (
         <div className="border-b">
           <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center gap-6 text-xs font-semibold">
@@ -121,7 +126,7 @@ export default function Header() {
         </div>
       )}
 
-      {/* Logo + Search + Icons - compact on scroll */}
+      {/* Logo + Search + Icons */}
       {(!collapsed || stickyHeader) && (
         <div className="border-b">
           <div className={`max-w-7xl mx-auto px-4 flex items-center gap-4 transition-all ${collapsed ? 'py-1.5' : 'py-3'}`}>
@@ -138,7 +143,7 @@ export default function Header() {
               )}
             </Link>
             <form onSubmit={handleSearch} className="flex-1 max-w-2xl hidden md:flex">
-              <div className={`flex w-full rounded-xl overflow-hidden border-2 border-gray-200 focus-within:border-blue-500 transition`}>
+              <div className="flex w-full rounded-xl overflow-hidden border-2 border-gray-200 focus-within:border-blue-500 transition">
                 <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Hľadať produkt, značku..." className={`flex-1 px-4 focus:outline-none text-sm transition-all ${collapsed ? 'py-1.5' : 'py-2.5'}`} />
                 <button type="submit" className="px-5 text-white bg-blue-600 hover:bg-blue-700 transition">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -162,11 +167,11 @@ export default function Header() {
         </div>
       )}
 
-      {/* Categories - normal or collapsed (small thumbnails) */}
+      {/* Categories bar */}
       <div className="hidden lg:block border-b relative">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-end overflow-x-auto no-scrollbar">
-            {navCategories.map(({ cat, label, showMega }) => (
+            {visibleCategories.map(({ cat, label, showMega }) => (
               <Link
                 key={cat.id}
                 href={`/categories/${cat.slug}`}
@@ -177,19 +182,55 @@ export default function Header() {
                 onMouseLeave={scheduleMegaClose}
               >
                 <div className={`flex items-center justify-center transition-all ${collapsed ? 'w-7 h-7' : 'w-14 h-14 mb-1.5'}`}>
-                  {cat.image ? (
-                    <img src={cat.image} alt={label} className="max-w-full max-h-full object-contain" />
-                  ) : (
-                    <span className={`text-gray-300 ${collapsed ? 'text-xs' : 'text-2xl'}`}>{label.charAt(0)}</span>
-                  )}
+                  {cat.image ? <img src={cat.image} alt={label} className="max-w-full max-h-full object-contain" /> : <span className={`text-gray-300 ${collapsed ? 'text-xs' : 'text-2xl'}`}>{label.charAt(0)}</span>}
                 </div>
-                <span className={`font-semibold leading-tight whitespace-nowrap ${
+                <span className={`font-semibold leading-tight ${
                   activeCategoryId === cat.id ? 'text-blue-600' : 'text-gray-700 group-hover:text-blue-600'
-                } ${collapsed ? 'text-[11px]' : 'text-[11px]'}`}>
+                } ${collapsed ? 'text-[11px] whitespace-nowrap' : 'text-[11px]'}`}>
                   {collapsed ? label.split(' ').slice(0, 2).join(' ') : label}
                 </span>
               </Link>
             ))}
+
+            {/* "Ďalšie" hamburger with dropdown - like profibuy.sk */}
+            {overflowCategories.length > 0 && (
+              <div
+                className="relative flex-shrink-0"
+                onMouseEnter={() => { if (moreTimeout.current) clearTimeout(moreTimeout.current); setMoreMenuOpen(true) }}
+                onMouseLeave={() => { moreTimeout.current = setTimeout(() => setMoreMenuOpen(false), 200) }}
+              >
+                <button
+                  className={`flex items-center justify-center border-b-2 border-transparent hover:border-blue-300 transition-all ${
+                    collapsed ? 'px-3 py-1.5' : 'px-4 py-3 min-w-[70px]'
+                  }`}
+                >
+                  <div className={`flex items-center justify-center ${collapsed ? 'w-7 h-7' : 'w-14 h-14 mb-1.5'}`}>
+                    <svg className={`text-gray-400 ${collapsed ? 'w-5 h-5' : 'w-8 h-8'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Dropdown with remaining categories */}
+                {moreMenuOpen && (
+                  <div className="absolute right-0 top-full bg-white rounded-b-xl shadow-xl border border-t-0 z-50 min-w-[220px] py-1" style={{ animation: 'fadeIn 0.15s ease-out' }}>
+                    {overflowCategories.map(({ cat, label }) => (
+                      <Link
+                        key={cat.id}
+                        href={`/categories/${cat.slug}`}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition"
+                        onClick={() => setMoreMenuOpen(false)}
+                      >
+                        <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                          {cat.image ? <img src={cat.image} alt="" className="max-w-full max-h-full object-contain" /> : <span className="text-xs font-bold text-gray-300">{label.charAt(0)}</span>}
+                        </div>
+                        <span className="text-sm text-gray-800 font-medium">{label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

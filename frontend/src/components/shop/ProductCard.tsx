@@ -25,6 +25,16 @@ export default function ProductCard({ product }: { product: Product }) {
 
   if (!product) return null
 
+  // Get key attributes to display (first 4 non-empty)
+  const keyAttrs = (product.attributes || [])
+    .filter(a => a.name && a.value && a.value.length < 60)
+    .slice(0, 4)
+
+  // Short description (first 100 chars)
+  const shortDesc = product.description
+    ? product.description.replace(/<[^>]*>/g, '').substring(0, 100).trim()
+    : ''
+
   return (
     <div className="product-card group relative">
       {/* Sale badge */}
@@ -57,15 +67,27 @@ export default function ProductCard({ product }: { product: Product }) {
 
       {/* Content */}
       <div className="p-4">
-        {/* Brand */}
-        {product.brand_id && (
-          <span className="text-xs font-semibold uppercase tracking-wider mb-1 block" style={{ color: 'var(--accent)' }}>Brand</span>
-        )}
-
         {/* Name */}
-        <Link href={`/products/${product.slug}`} className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-blue-700 transition leading-tight min-h-[2.5rem] block mb-3">
+        <Link href={`/products/${product.slug}`} className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-blue-700 transition leading-tight min-h-[2.5rem] block mb-2">
           {product.name || 'Bez názvu'}
         </Link>
+
+        {/* Short description */}
+        {shortDesc && (
+          <p className="text-[11px] text-gray-500 leading-snug mb-2 line-clamp-2">{shortDesc}{shortDesc.length >= 100 ? '...' : ''}</p>
+        )}
+
+        {/* Key attributes */}
+        {keyAttrs.length > 0 && (
+          <div className="mb-3 space-y-0.5">
+            {keyAttrs.map((attr, i) => (
+              <div key={i} className="flex items-baseline gap-1.5 text-[11px]">
+                <span className="text-gray-400 flex-shrink-0">{attr.name}:</span>
+                <span className="text-gray-700 font-medium truncate">{attr.value}{attr.unit ? ` ${attr.unit}` : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Price */}
         <div className="flex items-end gap-2 mb-3">
@@ -83,11 +105,11 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="flex items-center justify-between">
           <span className={`flex items-center gap-1.5 text-xs font-medium ${(product.stock || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
             <span className={`w-2 h-2 rounded-full ${(product.stock || 0) > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
-            {(product.stock || 0) > 0 ? 'Skladom' : 'Nedostupne'}
+            {(product.stock || 0) > 0 ? 'Skladom' : 'Nedostupné'}
           </span>
           {(product.stock || 0) > 0 && (
             <button onClick={handleAddToCart} className={`px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all duration-200 ${added ? 'bg-green-500' : 'hover:scale-105'}`} style={!added ? { background: 'var(--primary)' } : {}}>
-              {added ? '✓' : 'Do kosika'}
+              {added ? '✓' : 'Do košíka'}
             </button>
           )}
         </div>

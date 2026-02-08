@@ -785,6 +785,47 @@ func SaveFilterSettings(db *database.Postgres) gin.HandlerFunc {
 	}
 }
 
+// ==================== NAVIGATION SETTINGS ====================
+
+// GetNavigationSettings returns saved navigation configuration
+func GetNavigationSettings(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		var settings json.RawMessage
+		err := db.Pool().QueryRow(ctx, `SELECT value FROM settings WHERE key = 'navigation_settings'`).Scan(&settings)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": true, "data": map[string]interface{}{
+				"items":               []interface{}{},
+				"max_visible":         10,
+				"show_product_counts": false,
+			}})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
+	}
+}
+
+// SaveNavigationSettings saves navigation configuration
+func SaveNavigationSettings(db *database.Postgres) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		var settings json.RawMessage
+		if err := c.ShouldBindJSON(&settings); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		_, err := db.Pool().Exec(ctx, `
+			INSERT INTO settings (id, key, value, "group") VALUES (gen_random_uuid(), 'navigation_settings', $1, 'navigation')
+			ON CONFLICT (key) DO UPDATE SET value = $1
+		`, settings)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	}
+}
+
 // ==================== CART ====================
 
 // CreateCart handles POST /api/cart

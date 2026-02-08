@@ -93,6 +93,9 @@ func main() {
 			// Filters
 			public.GET("/filters", handlers.GetFilters(db, redisCache))
 			public.GET("/filters/:category", handlers.GetCategoryFilters(db, redisCache))
+
+			// Navigation settings (public - for header)
+			public.GET("/navigation", handlers.GetNavigationSettings(db))
 			
 			// Cart
 			public.POST("/cart", handlers.CreateCart(db))
@@ -212,6 +215,10 @@ func main() {
 
 			// Export feed management
 			admin.POST("/export/regenerate", handlers.RegenerateHeurekaXML(db, cfg))
+
+			// Navigation management
+			admin.GET("/navigation", handlers.GetNavigationSettings(db))
+			admin.POST("/navigation", handlers.SaveNavigationSettings(db))
 		}
 	}
 

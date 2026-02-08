@@ -18,7 +18,7 @@ export default function FilterSidebar({ categorySlug, onFilterChange, totalProdu
   const [loading, setLoading] = useState(true)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     price: true,
-    brands: true,
+    brands: false,
     stock: true,
   })
   const [brandSearch, setBrandSearch] = useState('')

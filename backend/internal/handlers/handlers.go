@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -570,6 +571,12 @@ func AutoAssignCategoryThumbnails(db *database.Postgres, redisCache *cache.Redis
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
+		// If force=true, reset all category images first
+		force := c.Query("force") == "true"
+		if force {
+			db.Pool().Exec(ctx, `UPDATE categories SET image = '' WHERE image IS NOT NULL`)
+		}
+
 		// Get all categories without an image (or empty image)
 		rows, err := db.Pool().Query(ctx, `
 			SELECT c.id, c.name
@@ -606,15 +613,18 @@ func AutoAssignCategoryThumbnails(db *database.Postgres, redisCache *cache.Redis
 		skipped := 0
 
 		for _, cat := range catsWithoutImage {
-			// Try to find a product in this category that has images
-			// First: direct products in this category
-			// Then: products in child categories (recursive via ltree or parent_id)
+			// Try to find a product image recursively through all descendant categories
 			var imageJSON json.RawMessage
 			err := db.Pool().QueryRow(ctx, `
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM categories WHERE id = $1
+					UNION ALL
+					SELECT c.id FROM categories c JOIN descendants d ON c.parent_id = d.id
+				)
 				SELECT p.images
 				FROM products p
-				WHERE p.category_id = $1
-				  AND p.images IS NOT NULL
+				JOIN descendants d ON p.category_id = d.id
+				WHERE p.images IS NOT NULL
 				  AND p.images != '[]'::jsonb
 				  AND p.images != 'null'::jsonb
 				  AND jsonb_array_length(p.images) > 0
@@ -622,23 +632,6 @@ func AutoAssignCategoryThumbnails(db *database.Postgres, redisCache *cache.Redis
 				ORDER BY p.stock DESC, p.created_at DESC
 				LIMIT 1
 			`, cat.ID).Scan(&imageJSON)
-
-			if err != nil {
-				// Try child categories
-				err = db.Pool().QueryRow(ctx, `
-					SELECT p.images
-					FROM products p
-					JOIN categories child ON p.category_id = child.id
-					WHERE child.parent_id = $1
-					  AND p.images IS NOT NULL
-					  AND p.images != '[]'::jsonb
-					  AND p.images != 'null'::jsonb
-					  AND jsonb_array_length(p.images) > 0
-					  AND p.status = 'active'
-					ORDER BY p.stock DESC, p.created_at DESC
-					LIMIT 1
-				`, cat.ID).Scan(&imageJSON)
-			}
 
 			if err != nil {
 				skipped++
@@ -708,6 +701,9 @@ func GetFilters(db *database.Postgres, redisCache *cache.Redis) gin.HandlerFunc 
 			return
 		}
 
+		// Apply admin filter settings
+		applyFilterSettings(ctx, db, filters)
+
 		c.JSON(http.StatusOK, filters)
 	}
 }
@@ -730,8 +726,74 @@ func GetCategoryFilters(db *database.Postgres, redisCache *cache.Redis) gin.Hand
 			return
 		}
 
+		// Apply admin filter settings
+		applyFilterSettings(ctx, db, filters)
+
 		c.JSON(http.StatusOK, filters)
 	}
+}
+
+// applyFilterSettings reads admin filter settings and removes disabled attributes
+func applyFilterSettings(ctx context.Context, db *database.Postgres, filters *models.FilterOptions) {
+	if filters == nil {
+		return
+	}
+
+	settingsJSON, err := db.GetFilterSettings(ctx)
+	if err != nil {
+		return // No settings saved, show all
+	}
+
+	var settings struct {
+		Enabled         map[string]interface{} `json:"enabled"`
+		GlobalMaxValues int                    `json:"global_max_values"`
+		ShowCounts      bool                   `json:"show_counts"`
+	}
+	if err := json.Unmarshal(settingsJSON, &settings); err != nil {
+		return
+	}
+
+	// If no enabled map or it's empty, show all (no admin config yet)
+	if len(settings.Enabled) == 0 {
+		return
+	}
+
+	// Filter attributes - only keep enabled ones
+	var filtered []models.AttributeFilter
+	for _, attr := range filters.Attributes {
+		enabledVal, exists := settings.Enabled[attr.Name]
+		if !exists {
+			continue // Not in settings = not shown
+		}
+		// Check if it's enabled (can be bool or object with "active" field)
+		enabled := false
+		switch v := enabledVal.(type) {
+		case bool:
+			enabled = v
+		case map[string]interface{}:
+			if active, ok := v["active"]; ok {
+				if b, ok := active.(bool); ok {
+					enabled = b
+				}
+			}
+			// Apply max_values from individual setting
+			if maxVal, ok := v["max_values"]; ok {
+				if mv, ok := maxVal.(float64); ok && int(mv) > 0 {
+					if int(mv) < len(attr.Values) {
+						attr.Values = attr.Values[:int(mv)]
+					}
+				}
+			}
+		}
+		if enabled {
+			// Apply global max values limit
+			if settings.GlobalMaxValues > 0 && settings.GlobalMaxValues < len(attr.Values) {
+				attr.Values = attr.Values[:settings.GlobalMaxValues]
+			}
+			filtered = append(filtered, attr)
+		}
+	}
+	filters.Attributes = filtered
 }
 
 // ==================== ATTRIBUTE FILTER MANAGEMENT ====================

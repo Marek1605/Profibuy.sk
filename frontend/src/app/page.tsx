@@ -124,44 +124,6 @@ export default function HomePage() {
       <main className="bg-white">
 
         {/* === CATEGORY ICONS BAR (like profibuy.sk) === */}
-        {categories.length > 0 && (
-          <section className="border-b bg-white">
-            <div className="max-w-7xl mx-auto px-4 py-4">
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-                {categories.slice(0, 10).map(cat => (
-                  <Link key={cat.id} href={`/categories/${cat.slug}`} onMouseEnter={() => setActiveCategory(cat.slug)} onMouseLeave={() => setActiveCategory(null)} className={`category-card flex-shrink-0 min-w-[110px] ${activeCategory === cat.slug ? 'border-blue-400 bg-blue-50' : ''}`}>
-                    <span className="text-3xl">{categoryEmojis[cat.slug] || '📦'}</span>
-                    <span className="text-xs font-semibold text-center text-gray-700 leading-tight">{cat.name}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            {/* Subcategory dropdown on hover */}
-            {activeCategory && activeCat && activeCat.children && activeCat.children.length > 0 && (
-              <div className="bg-gray-50 border-t" onMouseEnter={() => setActiveCategory(activeCategory)} onMouseLeave={() => setActiveCategory(null)}>
-                <div className="max-w-7xl mx-auto px-4 py-6">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {activeCat.children.map(sub => (
-                      <Link key={sub.id} href={`/categories/${sub.slug}`} className="flex items-center gap-3 p-3 rounded-xl bg-white hover:shadow-md transition group">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-50 transition">
-                          <span className="text-lg">{categoryEmojis[sub.slug] || '📁'}</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-700">{sub.name}</p>
-                          {sub.children && sub.children.length > 0 && (
-                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{sub.children.slice(0, 3).map(c => c.name).join(' • ')}</p>
-                          )}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
         {/* === HERO === */}
         <section className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%)' }}>
           <div className="absolute inset-0 opacity-10">
